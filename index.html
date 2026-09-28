@@ -1,0 +1,2203 @@
+<title>Braaaap 2T</title>
+<meta charset="utf-8">
+<meta name="description" content="Protótipo de jogo de celular de motocross 2 tempos em 3D, câmera alta fixa e acabamento de pixel art.">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Barlow+Semi+Condensed:wght@400;600;700&display=swap">
+<style>
+  /* Visual único e escuro de propósito (tela de fliperama/CRT): sem variantes claras. */
+  :root {
+    color-scheme: dark;
+    --bg: #150e0b;
+    --panel: #21150f;
+    --panel-2: #2b1c15;
+    --line: #3d2a20;
+    --ink: #f3e6d4;
+    --muted: #b0957d;
+    --dirt: #d8642c;
+    --sun: #f8d038;
+    --ok: #8fc25a;
+  }
+  html, body { background: var(--bg); }
+  body {
+    color: var(--ink);
+    font: 16px/1.5 "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+    padding-inline: 16px;
+    padding-block: 20px 48px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 20px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+  h1 { font-family: Silkscreen, "Courier New", monospace; font-weight: 400; font-size: clamp(24px, 4.4vw, 38px); line-height: 1.05; margin: 0; color: var(--sun); text-wrap: balance; letter-spacing: .01em; }
+  h1 span { color: var(--dirt); }
+  .tag { font-family: Silkscreen, "Courier New", monospace; font-size: 12px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  h2 { font-family: Silkscreen, "Courier New", monospace; font-weight: 400; font-size: 17px; margin: 0; color: var(--sun); letter-spacing: .03em; }
+  p { margin: 0; max-width: 68ch; }
+  .muted { color: var(--muted); }
+
+  .screen { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; background: #000; border: 2px solid var(--line); border-radius: 6px; overflow: hidden; }
+  #game { position: relative; z-index: 1; width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+  .screen.crt::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(rgba(0,0,0,.28) 50%, transparent 50%); background-size: 100% calc(100% / 224); }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; justify-content: space-between; }
+  .keys { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 15px; }
+  kbd { font-family: Silkscreen, monospace; font-size: 11px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 4px; padding: 1px 6px; }
+  .toggles { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font: 600 15px/1 "Barlow Semi Condensed", system-ui, sans-serif; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 8px 12px; cursor: pointer; }
+  button:hover { border-color: var(--dirt); }
+  button:focus-visible, .slot:focus-within { outline: 2px solid var(--sun); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--dirt); border-color: var(--dirt); color: #1a0d07; }
+
+  .pad { display: none; gap: 10px; justify-content: space-between; user-select: none; -webkit-user-select: none; }
+  .pad .grp { display: flex; gap: 10px; }
+  .pad .dica { align-items: center; color: var(--muted); font-size: 14px; }
+  .pad button { width: 68px; height: 60px; font-family: Silkscreen, monospace; font-size: 18px; touch-action: none; }
+  .pad button.a { background: #7c2a12; border-color: var(--dirt); }
+  @media (pointer: coarse) { .pad { display: flex; } }
+
+  .imports { display: grid; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 16px; }
+  .slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .slot { position: relative; display: grid; grid-template-rows: auto 1fr auto; gap: 8px; background: var(--panel-2); border: 1px dashed var(--line); border-radius: 6px; padding: 12px; min-height: 190px; }
+  .slot.over { border-color: var(--sun); border-style: solid; }
+  .slot h3 { margin: 0; font-size: 16px; font-weight: 700; }
+  .slot h3 small { display: block; font-weight: 400; font-size: 14px; color: var(--muted); }
+  .thumb { display: grid; place-items: center; background: #0d0806; border-radius: 4px; min-height: 76px; overflow: hidden; }
+  .thumb canvas, .thumb img { max-width: 100%; max-height: 110px; image-rendering: pixelated; }
+  .slot .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .slot label.pick { font-weight: 600; font-size: 15px; background: var(--dirt); color: #1a0d07; border-radius: 5px; padding: 7px 10px; cursor: pointer; }
+  .slot input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .status { font-size: 14px; color: var(--muted); min-height: 1.5em; }
+  .status.ok { color: var(--ok); }
+  .guide { display: grid; grid-template-columns: minmax(0, 220px) 1fr; gap: 16px; align-items: start; }
+  .guide img { width: 100%; max-width: 100%; border-radius: 4px; border: 1px solid var(--line); image-rendering: pixelated; }
+  .legend { display: grid; gap: 6px; font-size: 15px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+  .gab { width: 100%; max-width: 100%; border-radius: 3px; image-rendering: auto; opacity: .9; }
+  .labfoot { display: grid; grid-template-columns: minmax(0, 240px) 1fr; gap: 16px; align-items: start; }
+  .turn { background: #0d0806; border-radius: 6px; display: grid; place-items: center; padding: 8px; }
+  #turntable { width: 100%; max-width: 100%; aspect-ratio: 96 / 56; image-rendering: pixelated; }
+  #palettes { width: 465px; max-width: 100%; aspect-ratio: 31 / 4; image-rendering: pixelated; border-radius: 3px; }
+  body.demo { padding: 0; }
+  body.demo .wrap { max-width: none; gap: 0; }
+  body.demo .wrap > :not(.screen) { display: none; }
+  body.demo .screen { border: 0; border-radius: 0; height: min(100vh, 56.25vw); width: auto; margin: 0 auto; }
+  @media (max-width: 560px) { .labfoot { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { .guide { grid-template-columns: 1fr; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>BRAAAAP <span>2T</span></h1>
+    <div class="tag">Protótipo para celular · 1 pista · 3 voltas</div>
+  </header>
+
+  <div class="screen crt" id="screen">
+    <canvas id="game" width="400" height="224" tabindex="0" aria-label="Tela do jogo"></canvas>
+  </div>
+
+  <div class="pad" id="pad" aria-label="Controles de toque">
+    <div class="grp">
+      <button data-k="left" aria-label="Esquerda">◀</button>
+      <button data-k="right" aria-label="Direita">▶</button>
+    </div>
+    <div class="grp">
+      <button data-k="brake" aria-label="Freio">B</button>
+      <button data-k="gas" class="a" aria-label="Acelerar">A</button>
+    </div>
+  </div>
+
+  <div class="bar">
+    <div class="keys">
+      <span><kbd>↑</kbd> gás (sobe aos poucos)</span>
+      <span><kbd>↓</kbd> freio</span>
+      <span><kbd>←</kbd><kbd>→</kbd> direção</span>
+      <span><kbd>Q</kbd>/<kbd>E</kbd> carregar/soltar a suspensão no salto</span>
+      <span><kbd>+</kbd><kbd>−</kbd> zoom</span>
+      <span><kbd>C</kbd> câmera (diagonal, fixa, de lado, de trás)</span>
+      <span><kbd>R</kbd> voltar ao traçado</span>
+      <span><kbd>T</kbd> teste automático · <kbd>K</kbd> derrubar o piloto</span>
+      <span>controle (DualShock 4 / GameSir): R2 gás · L2 ou □ freio · alavanca: direção, para baixo carrega, para cima solta · △ volta ao traçado · R1/L1 zoom · Select/Share troca a câmera (diagonal, fixa, de lado, de trás) · ✕ ou Options larga · <kbd>G</kbd> testa o controle</span>
+      <span>celular: ◀ ▶, A gás, B freio</span>
+      <span><kbd>ENTER</kbd> largar</span>
+    </div>
+    <div class="toggles">
+      <button id="btnTeste" aria-pressed="false">Teste automático</button>
+      <button id="btnControle" aria-pressed="false">Controle</button>
+      <button id="btnSound" aria-pressed="false">Som</button>
+      <button id="btnCrt" aria-pressed="true">Scanlines</button>
+      <button id="btnPause" aria-pressed="false">Pausa</button>
+    </div>
+  </div>
+  <p class="muted">Pule nas rampas e aponte para o lado no ar para fazer o whip. Aterrisse reto para subir o combo até x8. Se cair torto, você cai da moto.</p>
+
+  <section class="imports" aria-labelledby="lab" hidden>
+    <h2 id="lab">Laboratório do piloto</h2>
+    <p class="muted">A cartela da moto vista de trás e de cima, com a câmera uns 30° acima do piloto, igual à do jogo. Cada linha é uma imagem separada no Nano Banana, com o gabarito anexado. Nas poses de curva e de whip você gera só o lado esquerdo e o jogo espelha o direito, como o SNES faz com o bit de flip. A arte entra com todas as cores; os rivais são a mesma arte com outro matiz.</p>
+    <div class="slots">
+      <div class="slot" data-kind="lean">
+        <h3>Pilotagem<small>3 ou 5 poses, do reto ao forte, à esquerda</small></h3>
+        <img class="gab" alt="Gabarito de pilotagem: caixas magenta escuras sobre fundo magenta">
+        <div class="thumb"><canvas width="150" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Usando sprite gerado pelo código.</div>
+      </div>
+      <div class="slot" data-kind="angles">
+        <h3>Ângulos<small>7 vistas: de trás (0°) até de frente (180°)</small></h3>
+        <img class="gab" alt="Gabarito de ângulos: caixas magenta escuras sobre fundo magenta">
+        <div class="thumb"><canvas width="210" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Sem ângulos: rivais sempre de costas.</div>
+      </div>
+      <div class="slot" data-kind="air">
+        <h3>No ar<small>3 poses: pulo, whip leve e whip forte à esquerda</small></h3>
+        <img class="gab" alt="Gabarito de no ar: caixas magenta escuras sobre fundo magenta">
+        <div class="thumb"><canvas width="150" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Sem poses no ar: o jogo gira o sprite.</div>
+      </div>
+      <div class="slot" data-kind="crash">
+        <h3>Queda<small>3 poses: perdendo o controle, voando, no chão</small></h3>
+        <img class="gab" alt="Gabarito de queda: caixas magenta escuras sobre fundo magenta">
+        <div class="thumb"><canvas width="120" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Sem queda: o jogo gira o sprite.</div>
+      </div>
+    </div>
+    <div class="labfoot">
+      <div class="turn"><canvas id="turntable" width="96" height="56" aria-label="Prévia girando: ângulos e poses do piloto"></canvas></div>
+      <div class="legend">
+        <h2>Paletas</h2>
+        <canvas id="palettes" width="310" height="40" aria-label="Paleta do piloto e dos três rivais"></canvas>
+        <p class="muted" id="palInfo">Paleta procedural. Importe uma linha para gerar a paleta de 15 cores.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="imports" aria-labelledby="trilha" hidden>
+    <h2 id="trilha">Trilha brasileira</h2>
+    <p class="muted">Bichos que atravessam a pista e o cenário das margens. A galinha solta penas e segue a vida, o porco dá uma trombada e a vaca derruba. Pular por cima dá ponto. Os meninos ficam sempre longe da pista. Enquanto a arte do Nano Banana não chega, o jogo usa desenhos provisórios feitos no código.</p>
+    <div class="slots">
+      <div class="slot" data-kind="galinha">
+        <h3>Galinha<small>2 quadros de corrida, virada para a esquerda</small></h3>
+        <div class="thumb"><canvas width="120" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Provisório do código.</div>
+      </div>
+      <div class="slot" data-kind="porco">
+        <h3>Porco<small>2 quadros de corrida, virado para a esquerda</small></h3>
+        <div class="thumb"><canvas width="120" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Provisório do código.</div>
+      </div>
+      <div class="slot" data-kind="vaca">
+        <h3>Vaca<small>2 quadros de corrida, virada para a esquerda</small></h3>
+        <div class="thumb"><canvas width="140" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Provisório do código.</div>
+      </div>
+      <div class="slot" data-kind="trilha-a">
+        <h3>Beira da pista A<small>casebre, carroça, mandacaru, entulho</small></h3>
+        <div class="thumb"><canvas width="180" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Provisório do código.</div>
+      </div>
+      <div class="slot" data-kind="trilha-b">
+        <h3>Beira da pista B<small>menino com bola, menino com pipa, varal, bicicleta</small></h3>
+        <div class="thumb"><canvas width="180" height="40"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Provisório do código.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="imports" aria-labelledby="imp" hidden>
+    <h2 id="imp">Cenário</h2>
+    <p class="muted">Arraste a imagem gerada até o encaixe ou toque em “Escolher”. O jogo corta, ajusta o tamanho e tira o fundo magenta. A física da pista não muda: por isso o desenho da pista precisa seguir o guia abaixo.</p>
+    <div class="slots">
+      <div class="slot" data-kind="track">
+        <h3>Pista<small>vista de cima, quadrada 1:1</small></h3>
+        <div class="thumb"><canvas width="96" height="96"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Usando textura gerada pelo código.</div>
+      </div>
+      <div class="slot" data-kind="props">
+        <h3>Objetos<small>árvore, arbusto, pneus, feno · fundo #FF00FF</small></h3>
+        <div class="thumb"><canvas width="140" height="44"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Usando sprites gerados pelo código.</div>
+      </div>
+      <div class="slot" data-kind="sky">
+        <h3>Horizonte<small>panorâmico 4:1, bordas emendáveis</small></h3>
+        <div class="thumb"><canvas width="192" height="44"></canvas></div>
+        <div class="acts"><label class="pick">Escolher<input type="file" accept="image/*"></label><button class="reset">Padrão</button></div>
+        <div class="status">Usando céu gerado pelo código.</div>
+      </div>
+    </div>
+
+    <div class="guide">
+      <img id="guideImg" alt="Guia da pista vista de cima: faixa marrom do traçado, rampas em amarelo, aterrissagens em azul e largada quadriculada">
+      <div class="legend">
+        <h2>Guia da pista</h2>
+        <p class="muted">Anexe esta imagem no Nano Banana junto com o prompt da pista. Para salvar, clique com o botão direito (ou segure no celular) → Salvar imagem. Ela também está no repositório, em <code>docs/nano-banana/pista-guia.png</code>.</p>
+        <span><i style="background:#b0602c"></i>Traçado de terra (32 texels de largura)</span>
+        <span><i style="background:#ffd400"></i>Face de rampa e costelas (sobe)</span>
+        <span><i style="background:#2f6bff"></i>Aterrissagem (desce)</span>
+        <span><i style="background:#fff"></i>Linha de largada e bordas de cal</span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ---------------------------------------------------------------- constants
+const W = 400, H = 224, HZ = 92;           // tela 16:9 de celular deitado; horizonte perto do meio, como no vídeo do Veo
+const SKYW = 1280;                         // largura do horizonte: dá a volta completa de 360°
+const F = SKYW / (2 * Math.PI);            // distância focal: 1 volta = SKYW px de horizonte
+const TEX = 1024;                          // mapa Mode 7: 1024×1024 texels
+const HW = 16;                             // meia largura da pista
+const LAPS = 3;
+const VMAX = 96, ACC = 70, TURN = 2.0, G = 62;
+const BORDA_SOLTA = 3.5;                   // largura da beira de terra solta além da pista (mesma faixa pintada em r3d.js)
+// aderência do piso: 1 no barro da pista, cai na beira solta e ainda mais no capim/sertão fora dela
+function aderenciaEm(lat) {
+  const a = Math.abs(lat);
+  if (a <= HW) return 1;
+  if (a <= HW + BORDA_SOLTA) return 0.68;
+  return 0.4;
+}
+// câmera: distância atrás e altura, sempre no mesmo ângulo de ~28° (a cartela de 30° continua valendo)
+const CAMS = [['colada', 16, 8.4], ['perto', 20, 10.5], ['média', 28, 14.7], ['longe', 36, 18.9]];
+let camIdx = 0;
+try { const c = +localStorage.getItem('braaaap-cam'); if (c >= 0 && c < CAMS.length) camIdx = c; } catch (e) {}
+let CB = CAMS[camIdx][1], CH = CAMS[camIdx][2];
+// resolução de desenho: a lógica do jogo é sempre 400×224; SC multiplica os pixels do chão e dos sprites
+const RES = [['1×', 1], ['2×', 2], ['3×', 3]];
+let resIdx = 2;
+try { const r = localStorage.getItem('braaaap-res'); if (r !== null && +r >= 0 && +r < RES.length) resIdx = +r; } catch (e) {}
+let SC = RES[resIdx][1];
+let RIDER_PX = 64 * SC;                    // altura do piloto na cartela importada (64 px no SNES = 1 sprite 64×64)
+// jogo de celular: sem limite de console. LIMITE_CORES = true volta ao modo SNES (15 bits e 2 paletas de 15 no piloto)
+const LIMITE_CORES = false;
+const PAL_N = 30;                          // 2 paletas de sprite de 15 cores (moto + piloto), como os jogos de SNES que montavam o personagem com 2 OBJs
+// bichos e vilas de trilha: prontos, mas desligados até a pilotagem ficar boa
+const TRILHA_ATIVA = false;
+const STEP = 1 / 60;
+
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+let floorImg, floor32;
+function setupCanvas() {
+  cv.width = W * SC; cv.height = H * SC;
+  ctx.imageSmoothingEnabled = false;
+  floorImg = ctx.createImageData(W * SC, H * SC);
+  floor32 = new Uint32Array(floorImg.data.buffer);
+}
+setupCanvas();
+
+const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const q5 = v => LIMITE_CORES ? (v & 0xF8) | (v >> 5) : v;   // no modo SNES: 8 bits → 5 bits
+const pack = (r, g, b) => (255 << 24) | (q5(b) << 16) | (q5(g) << 8) | q5(r);
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const angDiff = (a, b) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
+function hash(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+let seed = 1234567;
+const rnd = () => ((seed = Math.imul(seed ^ (seed >>> 15), 2246822507) + 0x9E3779B9 | 0) >>> 0) / 4294967296;
+
+// ---------------------------------------------------------------- track
+const CP = [[512,860],[300,860],[180,800],[150,680],[220,580],[360,560],[450,480],[420,360],[300,300],[200,220],[260,140],[420,130],[560,200],[640,320],[760,260],[880,200],[920,340],[860,470],[760,540],[820,650],[900,760],[820,860],[660,880]];
+const cr = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t; return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); };
+const dense = [];
+for (let i = 0; i < CP.length; i++) {
+  const n = CP.length, p0 = CP[(i - 1 + n) % n], p1 = CP[i], p2 = CP[(i + 1) % n], p3 = CP[(i + 2) % n];
+  for (let k = 0; k < 60; k++) { const t = k / 60; dense.push([cr(p0[0], p1[0], p2[0], p3[0], t), cr(p0[1], p1[1], p2[1], p3[1], t)]); }
+}
+// reamostra com espaçamento de 1 texel: índice = distância percorrida
+function reamostra(pts) {
+  const x = [], y = []; let carry = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    let d = carry;
+    while (d < L) { x.push(a[0] + (b[0] - a[0]) * d / L); y.push(a[1] + (b[1] - a[1]) * d / L); d += 1; }
+    carry = d - L;
+  }
+  return [x, y];
+}
+// Curvas: abre só as mais fechadas até ~24 m de raio (87 unidades). Antes chegavam a 12 m, e a moto de terra a
+// 70–80 km/h não fazia a curva e saía da pista. O traçado anda no máximo 8 unidades; as retas não mudam.
+const RAIO_MIN = 87;
+let [cx, cy] = reamostra(dense);
+for (let it = 0; it < 300; it++) {
+  const n = cx.length, R = new Float32Array(n);
+  let min = 1e9;
+  for (let i = 0; i < n; i++) {
+    const a = (i - 8 + n) % n, b = (i + 8) % n, ax = cx[i] - cx[a], ay = cy[i] - cy[a], bx = cx[b] - cx[i], by = cy[b] - cy[i];
+    const ang = Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
+    R[i] = ang > 1e-6 ? 16 / ang : 1e9; min = Math.min(min, R[i]);
+  }
+  if (min >= RAIO_MIN) break;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    let w = 0; for (let j = -12; j <= 12; j++) w = Math.max(w, clamp((RAIO_MIN * 1.3 - R[(i + j + n) % n]) / (RAIO_MIN * 0.6), 0, 1));
+    let sx = 0, sy = 0; for (let j = -3; j <= 3; j++) { sx += cx[(i + j + n) % n]; sy += cy[(i + j + n) % n]; }
+    pts.push([cx[i] + (sx / 7 - cx[i]) * 0.5 * w, cy[i] + (sy / 7 - cy[i]) * 0.5 * w]);
+  }
+  [cx, cy] = reamostra(pts);
+}
+const N = cx.length;
+const wrap = i => ((i % N) + N) % N;
+const tx = new Float32Array(N), ty = new Float32Array(N), curv = new Float32Array(N), hgt = new Float32Array(N), shade = new Float32Array(N);
+for (let i = 0; i < N; i++) {
+  const a = wrap(i - 1), b = wrap(i + 1);
+  const dx = cx[b] - cx[a], dy = cy[b] - cy[a], l = Math.hypot(dx, dy) || 1;
+  tx[i] = dx / l; ty[i] = dy / l;
+}
+for (let i = 0; i < N; i++) {
+  const a = wrap(i - 4), b = wrap(i + 4);
+  curv[i] = angDiff(Math.atan2(ty[a], tx[a]), Math.atan2(ty[b], tx[b])) / 8;
+}
+// obstáculos: procura o trecho mais reto perto de cada posição desejada
+const FEATS = [
+  { f: 0.09, type: 'whoops', len: 84, h: 1.9, per: 14 }, { f: 0.23, type: 'kicker', h: 5 }, { f: 0.39, type: 'double', h: 6 },
+  { f: 0.55, type: 'table', h: 5 }, { f: 0.69, type: 'whoops', len: 70, h: 1.9, per: 14 }, { f: 0.85, type: 'kicker', h: 7 },
+];
+// Altura da beira dos obstáculos, igual na física (groundAt) e no 3D (r3d.js, faixa da pista): talude de 1 para 2,2
+// (~24°) até o chão. Antes a beira caía em 5 unidades e rampa, duplo e mesa pareciam caixotes com paredes.
+const TALUDE_MAX = 16;
+function beira(h, l) {
+  if (l <= HW || h <= 0) return h;
+  const larg = Math.min(TALUDE_MAX, Math.max(3, h * 2.2)), t = (l - HW) / larg;
+  return t >= 1 ? 0 : h * (1 - t * t * (3 - 2 * t));
+}
+// kicker: sobe 18 e desce 30 (o pouso; antes terminava num paredão). Duplo: decolagem e pouso com as duas faces
+// inclinadas (antes a face do pouso era um paredão virado para o piloto)
+const featLen = ft => ft.type === 'whoops' ? ft.len : ft.type === 'kicker' ? 48 : ft.type === 'double' ? 70 : 58;
+const features = [];
+// as costelas procuram mais longe (empinando não dá para curvar: precisam de reta), sem encostar nos outros obstáculos
+const ordem = [...FEATS.keys()].sort((a, b) => (FEATS[b].type === 'whoops') - (FEATS[a].type === 'whoops'));
+const colocados = [];
+for (const n of ordem) {
+  const ft = FEATS[n];
+  const L = featLen(ft) + 40, busca = ft.type === 'whoops' ? 420 : 160;
+  let best = 0, bestS = 1e9;
+  for (let s = Math.floor(ft.f * N) - busca; s < ft.f * N + busca; s++) {
+    if (colocados.some(c => { const d = Math.abs(((wrap(s + 30) - c.i0 + N + N / 2) % N) - N / 2); return d < Math.max(featLen(ft), featLen(c)) + 70; })) continue;
+    let sum = 0;
+    for (let k = 0; k < L; k++) sum += Math.abs(curv[wrap(s + k)]);
+    if (sum < bestS) { bestS = sum; best = s; }
+  }
+  colocados.push({ ...ft, n, i0: wrap(best + 30) });
+}
+for (const { n, ...ft } of colocados.sort((a, b) => a.n - b.n)) {   // na ordem de FEATS (o resto do jogo indexa assim)
+  const i0 = ft.i0;
+  features.push(ft);
+  // costelas: 0,54 m de altura a cada 4 m, para passar empinando (a roda de trás desliza pelos topos: COSTELAS)
+  if (ft.type === 'whoops') for (let k = 0; k < ft.len; k++) hgt[wrap(i0 + k)] = ft.h * Math.sin(Math.PI * k / ft.per) ** 2;
+  if (ft.type === 'kicker') {
+    for (let k = 0; k < 18; k++) hgt[wrap(i0 + k)] = ft.h * (k + 1) / 18;
+    for (let k = 0; k < 30; k++) hgt[wrap(i0 + 18 + k)] = ft.h * (1 - (k + 1) / 30);
+  }
+  if (ft.type === 'double') {
+    for (let k = 0; k < 14; k++) hgt[wrap(i0 + k)] = ft.h * (k + 1) / 14;
+    for (let k = 0; k < 8; k++) hgt[wrap(i0 + 14 + k)] = ft.h * (1 - (k + 1) / 8);    // costas da decolagem
+    for (let k = 0; k < 8; k++) hgt[wrap(i0 + 40 + k)] = ft.h * (k + 1) / 8;          // face do pouso
+    for (let k = 0; k < 20; k++) hgt[wrap(i0 + 48 + k)] = ft.h * (1 - k / 20);
+  }
+  if (ft.type === 'table') {
+    for (let k = 0; k < 14; k++) hgt[wrap(i0 + k)] = ft.h * (k + 1) / 14;
+    for (let k = 14; k < 40; k++) hgt[wrap(i0 + k)] = ft.h;
+    for (let k = 0; k < 18; k++) hgt[wrap(i0 + 40 + k)] = ft.h * (1 - k / 18);
+  }
+}
+for (let i = 0; i < N; i++) shade[i] = clamp((hgt[wrap(i + 1)] - hgt[wrap(i - 1)]) * 0.75, -0.45, 0.45);
+// sombra projetada logo depois das bordas de salto
+for (let i = 0; i < N; i++) if (hgt[i] > 2 && hgt[wrap(i + 1)] < hgt[i] - 1) for (let k = 1; k <= 7; k++) shade[wrap(i + k)] = Math.min(shade[wrap(i + k)], -0.32 + k * 0.03);
+
+// campo de distância até o eixo da pista
+const dist = new Float32Array(TEX * TEX).fill(1e9), nIdx = new Int32Array(TEX * TEX), nLat = new Float32Array(TEX * TEX);
+{
+  const R = HW + 34;
+  for (let i = 0; i < N; i++) {
+    const px = cx[i], py = cy[i], nx = -ty[i], ny = tx[i];
+    const x0 = Math.max(0, Math.floor(px - R)), x1 = Math.min(TEX - 1, Math.ceil(px + R));
+    const y0 = Math.max(0, Math.floor(py - R)), y1 = Math.min(TEX - 1, Math.ceil(py + R));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - px, dy = y + 0.5 - py, d = dx * dx + dy * dy, o = y * TEX + x;
+      if (d < dist[o]) { dist[o] = d; nIdx[o] = i; nLat[o] = dx * nx + dy * ny; }
+    }
+  }
+  for (let o = 0; o < dist.length; o++) if (dist[o] < 1e8) dist[o] = Math.sqrt(dist[o]);
+}
+const PIT = { x0: 566, y0: 712, x1: 712, y1: 790 };
+const inPit = (x, y) => x >= PIT.x0 && x <= PIT.x1 && y >= PIT.y0 && y <= PIT.y1;
+
+const C = {
+  dirtD: [158, 70, 34], dirtL: [208, 110, 58], rut: [118, 48, 24], berm: [128, 56, 28], chalk: [238, 230, 216],
+  grassD: [84, 108, 46], grassL: [154, 148, 80], straw: [200, 182, 112], gravel: [150, 128, 108], black: [24, 20, 24],
+};
+function buildTexture(guide) {
+  const out = new Uint32Array(TEX * TEX);
+  for (let y = 0; y < TEX; y++) for (let x = 0; x < TEX; x++) {
+    const o = y * TEX + x, d = dist[o], id = nIdx[o], lat = nLat[o];
+    let c;
+    const onTrack = d < HW;
+    const start = onTrack && (id < 8 || id > N - 2);
+    if (guide) {
+      if (onTrack) {
+        c = [176, 96, 44];
+        if (shade[id] > 0.06) c = [255, 212, 0];
+        else if (shade[id] < -0.06) c = [47, 107, 255];
+        if (Math.abs(lat) > HW - 1.5) c = [255, 255, 255];
+        if (start) c = ((Math.floor(lat / 4) + Math.floor(id / 4)) & 1) ? [255, 255, 255] : [0, 0, 0];
+      } else c = inPit(x, y) ? [120, 120, 120] : [79, 122, 54];
+      out[o] = pack(c[0], c[1], c[2]);
+      continue;
+    }
+    const n1 = vnoise(x / 22, y / 22), n2 = hash(x, y);
+    if (onTrack) {
+      c = mix(C.dirtD, C.dirtL, n1 * 0.65 + n2 * 0.35);
+      for (const r of [-10, -4, 3, 9]) {
+        const rl = r + Math.sin(id * 0.043 + r * 1.7) * 1.8;
+        if (Math.abs(lat - rl) < 0.75) c = mix(c, C.rut, 0.65);
+      }
+      const s = shade[id];
+      c = s > 0 ? mix(c, [236, 150, 92], s * 1.6) : mix(c, [70, 26, 14], -s * 1.4);
+      if (hgt[id] > 3 && Math.abs(s) < 0.02) c = mix(c, [226, 134, 76], 0.25);
+      if (Math.abs(lat) > HW - 1.3 && ((id >> 3) % 3) !== 0) c = C.chalk;
+      if (start) c = ((Math.floor(lat / 4) + Math.floor(id / 4)) & 1) ? C.chalk : C.black;
+      if (id === 8 || id === 9) c = C.chalk;
+    } else if (d < HW + 3.2) {
+      c = mix(C.berm, C.dirtD, n2 * 0.5);
+    } else if (inPit(x, y)) {
+      c = mix(C.gravel, [118, 98, 84], n2 * 0.6);
+    } else {
+      c = mix(C.grassD, C.grassL, vnoise(x / 48 + 50, y / 48) * 0.8 + n1 * 0.2);
+      if (vnoise(x / 30 + 9, y / 30 + 3) > 0.74) c = mix(c, C.dirtD, 0.55);
+      if (n2 > 0.94) c = C.straw; else if (n2 < 0.05) c = mix(c, [40, 60, 24], 0.6);
+      if (d < HW + 7) c = mix(c, C.berm, (HW + 7 - d) / 5);
+    }
+    out[o] = pack(c[0] | 0, c[1] | 0, c[2] | 0);
+  }
+  return out;
+}
+const texDefault = buildTexture(false);
+let tex = texDefault;
+const texGuide = buildTexture(true);
+
+// ---------------------------------------------------------------- pixel font 3×5
+const GL = {
+  '0':'111101101101111','1':'010110010010111','2':'111001111100111','3':'111001111001111','4':'101101111001001',
+  '5':'111100111001111','6':'111100111101111','7':'111001001010010','8':'111101111101111','9':'111101111001111',
+  A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',
+  G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',
+  M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',
+  S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',
+  Y:'101101010010010',Z:'111001010100111',':':'000010000010000','.':'000000000000010','/':'001001010100100',
+  '-':'000000111000000','!':'010010010000010','+':'000010111010000',"'":'010010000000000',' ':'000000000000000',
+};
+function txt(s, x, y, sc, col, align) {
+  s = String(s).toUpperCase();
+  const w = s.length * 4 * sc - sc;
+  if (align === 'c') x -= (w / 2) | 0; else if (align === 'r') x -= w;
+  for (const pass of [0, 1]) {
+    ctx.fillStyle = pass ? col : '#1c0a04';
+    const off = pass ? 0 : sc;
+    for (let i = 0; i < s.length; i++) {
+      const g = GL[s[i]] || GL[' '];
+      for (let b = 0; b < 15; b++) if (g[b] === '1') {
+        const gx = x + i * 4 * sc + (b % 3) * sc, gy = y + ((b / 3) | 0) * sc;
+        if (pass) ctx.fillRect(gx, gy, sc, sc);
+        else { ctx.fillRect(gx + off, gy, sc, sc); ctx.fillRect(gx, gy + off, sc, sc); ctx.fillRect(gx + off, gy + off, sc, sc); }
+      }
+    }
+  }
+  return w;
+}
+
+// ---------------------------------------------------------------- procedural sprites
+function paint(w, h, fn) { const c = mk(w, h); const g = c.getContext('2d'); const r = (col, x, y, ww = 1, hh = 1) => { g.fillStyle = col; g.fillRect(x, y, ww, hh); }; fn(r, g); return c; }
+function riderSprite() {
+  return paint(24, 32, (r, g) => {
+    const K = '#141018', Gy = '#707080', R = '#d82830', Rd = '#8c1820', Wh = '#f0f0f0', B = '#2c4cc0', Bd = '#182a74';
+    r(Gy, 1, 12, 22, 1);                     // guidão
+    r(K, 9, 23, 6, 9); r(Gy, 10, 24); r(Gy, 13, 26); r(Gy, 10, 28); r(Gy, 13, 30); // pneu traseiro
+    r(R, 8, 20, 8, 3); r(Rd, 8, 22, 8, 1);   // paralama
+    r(K, 9, 16, 6, 4);                       // banco
+    r('#c8c8d0', 16, 17, 2, 4); r(Gy, 16, 20, 2, 1); // escapamento
+    r(R, 3, 13, 3, 4); r(R, 18, 13, 3, 4); r(Rd, 3, 16, 3, 1); r(Rd, 18, 16, 3, 1); // laterais
+    r(B, 5, 14, 4, 6); r(B, 15, 14, 4, 6); r(Bd, 5, 18, 4, 1); r(Bd, 15, 18, 4, 1); // calça
+    r(Wh, 4, 19, 3, 6); r(Wh, 17, 19, 3, 6); r(K, 4, 25, 3, 1); r(K, 17, 25, 3, 1); // botas
+    r(R, 6, 8, 12, 3); r(R, 7, 7, 10, 9); r(Rd, 7, 14, 10, 2); // tronco
+    r(Wh, 10, 9, 4, 1); r(Wh, 13, 10); r(Wh, 12, 11); r(Wh, 12, 12); r(Wh, 11, 13); // número 7
+    r(R, 3, 9, 3, 3); r(R, 18, 9, 3, 3); r(K, 1, 11, 3, 2); r(K, 20, 11, 3, 2); // braços e luvas
+    r(B, 8, 0, 8, 7); g.clearRect(8, 0, 1, 1); g.clearRect(15, 0, 1, 1); // capacete
+    r(Wh, 11, 1, 2, 1); r(Wh, 10, 2, 4, 1); r(Wh, 11, 3, 2, 1); r(Wh, 10, 4); r(Wh, 13, 4);
+    r(K, 8, 5, 8, 1); r(Bd, 9, 6, 6, 1);
+  });
+}
+function hueMat(deg) {
+  const a = deg * Math.PI / 180, co = Math.cos(a), si = Math.sin(a);
+  return [.213 + co * .787 - si * .213, .715 - co * .715 - si * .715, .072 - co * .072 + si * .928,
+             .213 - co * .213 + si * .143, .715 + co * .285 + si * .140, .072 - co * .072 - si * .283,
+             .213 - co * .213 - si * .787, .715 - co * .715 + si * .715, .072 + co * .928 + si * .072];
+}
+function hueRotate(src, deg) {
+  const c = mk(src.width, src.height), g = c.getContext('2d'); g.drawImage(src, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height), p = d.data, m = hueMat(deg);
+  for (let i = 0; i < p.length; i += 4) {
+    const R = p[i], Gg = p[i + 1], B = p[i + 2];
+    p[i] = q5(clamp(R * m[0] + Gg * m[1] + B * m[2], 0, 255) | 0);
+    p[i + 1] = q5(clamp(R * m[3] + Gg * m[4] + B * m[5], 0, 255) | 0);
+    p[i + 2] = q5(clamp(R * m[6] + Gg * m[7] + B * m[8], 0, 255) | 0);
+  }
+  g.putImageData(d, 0, 0); return c;
+}
+function blobSprite(w, h, blobs, cols, trunk) {
+  return paint(w, h, (r) => {
+    if (trunk) r('#4a2e1c', trunk[0], trunk[1], trunk[2], trunk[3]);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let inside = false, top = 1;
+      for (const [bx, by, br] of blobs) { const d = Math.hypot(x - bx, y - by) / br; if (d < 1) { inside = true; top = Math.min(top, (y - (by - br)) / (2 * br)); } }
+      if (!inside) continue;
+      const n = hash(x * 7, y * 13), t = top + (n - 0.5) * 0.35;
+      r(t < 0.3 ? cols[2] : t < 0.62 ? cols[1] : cols[0], x, y);
+    }
+  });
+}
+const SPR = {};
+function defaultSprites() {
+  SPR.tree = { img: blobSprite(32, 40, [[16, 14, 11], [8, 18, 8], [24, 18, 8], [12, 8, 7], [21, 9, 7]], ['#244a1c', '#3c6e26', '#6c9a38'], [14, 22, 4, 18]), wh: 18 };
+  SPR.bush = { img: blobSprite(20, 12, [[6, 8, 5], [13, 7, 6], [10, 5, 4]], ['#2c4e1e', '#4c7a2c', '#86a646']), wh: 3.6 };
+  SPR.tire = { img: paint(12, 10, (r) => { for (const y of [0, 5]) { r('#1a1a20', 1, y, 10, 5); r('#1a1a20', 0, y + 1, 12, 3); r('#4a4a56', 2, y + 1, 8, 1); r('#08080a', 4, y + 2, 4, 2); } }), wh: 2.8 };
+  SPR.hay = { img: paint(16, 10, (r) => { r('#c8a040', 0, 0, 16, 10); r('#e8c868', 0, 0, 16, 3); r('#98782c', 0, 8, 16, 2); r('#a08030', 5, 3, 1, 7); r('#a08030', 11, 3, 1, 7); }), wh: 2.8 };
+  SPR.stake = { img: paint(2, 8, (r) => { r('#e8e0c8', 0, 0, 2, 8); r('#d8642c', 0, 0, 2, 2); }), wh: 2.4 };
+  SPR.trailer = { img: paint(48, 22, (r) => { r('#e8e8ec', 0, 0, 48, 17); r('#c0c0cc', 0, 12, 48, 5); r('#b82828', 0, 9, 48, 2); r('#50506a', 4, 3, 10, 5); r('#50506a', 34, 3, 8, 5); r('#1a1a20', 8, 16, 7, 6); r('#1a1a20', 32, 16, 7, 6); r('#707080', 10, 18, 3, 2); r('#707080', 34, 18, 3, 2); }), wh: 8 };
+  SPR.fence = { img: paint(32, 10, (r) => { r('#9ca0a8', 0, 0, 32, 1); r('#9ca0a8', 0, 9, 32, 1); for (let x = 0; x < 32; x += 3) r('#b8bcc4', x, 0, 1, 10); r('#5c606a', 0, 0, 1, 10); r('#5c606a', 31, 0, 1, 10); }), wh: 3 };
+  SPR.gantry = { img: paint(96, 40, (r) => { r('#8a8e98', 2, 8, 4, 32); r('#8a8e98', 90, 8, 4, 32); r('#1a1a20', 0, 0, 96, 12); for (let x = 0; x < 96; x += 4) for (let y = 0; y < 12; y += 4) if (((x + y) >> 2) & 1) r('#f0f0f0', x, y, 4, 4); r('#1a1a20', 30, 2, 36, 8); }), wh: 16 };
+  // trilha brasileira (provisórios desenhados no código, até a arte do Nano Banana)
+  SPR.casebre = { img: paint(40, 32, (r) => {
+    r('#b86a40', 2, 12, 36, 20);
+    for (let y = 13; y < 32; y += 3) { r('#9a5230', 2, y, 36, 1); for (let x = 2 + ((y / 3) & 1) * 3; x < 38; x += 6) r('#9a5230', x, y - 2, 1, 2); }
+    r('#d8c8a8', 26, 14, 9, 7); r('#c8b898', 27, 20, 6, 2);                  // reboco pela metade
+    for (let i = 0; i < 10; i++) r('#9c3a24', 0 + i, 11 - i, 40 - 2 * i, 1); // telhado
+    for (let x = 1; x < 39; x += 3) r('#7a2a18', x, 3, 1, 8);
+    r('#4a2e1c', 17, 20, 6, 12); r('#2a1a10', 21, 26, 1, 1);                  // porta
+    r('#3a6ab0', 5, 15, 8, 8); r('#1a1a24', 6, 16, 6, 6); r('#3a6ab0', 8, 16, 1, 6); // janela
+  }), wh: 10 };
+  SPR.varal = { img: paint(30, 16, (r) => {
+    r('#5a3a20', 1, 0, 2, 16); r('#5a3a20', 27, 0, 2, 16); r('#3a3a3a', 2, 2, 26, 1);
+    r('#d82830', 5, 3, 4, 7); r('#2c4cc0', 11, 3, 5, 5); r('#f0f0f0', 18, 3, 4, 8); r('#f8d038', 24, 3, 3, 5); r('#1a8a3a', 24, 8, 3, 1);
+  }), wh: 3.6 };
+  SPR.carroca = { img: paint(34, 18, (r, g) => {
+    r('#8a5a30', 2, 4, 26, 6); r('#6a4222', 2, 6, 26, 1); r('#6a4222', 2, 9, 26, 1); r('#a07040', 2, 4, 26, 1);
+    r('#6a4a28', 27, 8, 7, 1); r('#6a4a28', 27, 9, 7, 1);
+    g.strokeStyle = '#4a2e1c'; g.lineWidth = 2; g.beginPath(); g.arc(11, 11, 6, 0, 7); g.stroke();
+    r('#4a2e1c', 10, 5, 2, 12); r('#4a2e1c', 5, 10, 12, 2); r('#2a1a10', 10, 10, 2, 2);
+  }), wh: 4.5 };
+  SPR.mandacaru = { img: paint(18, 34, (r) => {
+    r('#3c7a3a', 7, 4, 5, 30); r('#2c5a2a', 7, 4, 1, 30); r('#5c9a4a', 10, 4, 1, 30);
+    r('#3c7a3a', 2, 14, 5, 3); r('#3c7a3a', 2, 8, 3, 8); r('#2c5a2a', 2, 8, 1, 8);
+    r('#3c7a3a', 12, 12, 4, 3); r('#3c7a3a', 13, 5, 3, 9); r('#5c9a4a', 15, 5, 1, 9);
+    for (let y = 6; y < 32; y += 3) { r('#c8e090', 9, y); r('#c8e090', 3, y % 14 + 8); }
+    r('#e86a9a', 8, 2, 3, 2); r('#f8d038', 9, 2);                            // flor
+  }), wh: 8 };
+  SPR.entulho = { img: paint(24, 10, (r) => {
+    const cs = ['#a05a38', '#8a8a8a', '#6a6a6a', '#c0b090', '#b86a40', '#5a5a5a'];
+    for (let i = 0; i < 26; i++) { const w = 2 + (i * 7) % 4, x = (i * 5) % 22, y = 3 + ((i * 3) % 6) - (Math.abs(x - 11) < 6 ? 2 : 0); r(cs[i % cs.length], x, Math.max(0, y), w, 2); }
+    r('#3a3a3a', 3, 8, 18, 2);
+  }), wh: 1.8 };
+  SPR.bicicleta = { img: paint(22, 14, (r, g) => {
+    g.strokeStyle = '#222'; g.lineWidth = 1.5; g.beginPath(); g.arc(5, 9, 4, 0, 7); g.stroke(); g.beginPath(); g.arc(17, 9, 4, 0, 7); g.stroke();
+    g.strokeStyle = '#d82830'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(5, 9); g.lineTo(10, 3); g.lineTo(16, 3); g.lineTo(17, 9); g.moveTo(10, 3); g.lineTo(11, 9); g.lineTo(5, 9); g.stroke();
+    r('#222', 9, 1, 4, 1); r('#8a8e98', 15, 1, 3, 1);
+  }), wh: 2.4 };
+  const menino = (r, bola) => {
+    r('#6a3a1e', 3, 0, 5, 5); r('#1a1210', 3, 0, 5, 2);                      // cabeça e cabelo
+    r('#f8d038', 2, 5, 7, 6); r('#1a8a3a', 2, 5, 7, 1);                      // camisa canarinho
+    r('#2c4cc0', 2, 11, 7, 3); r('#6a3a1e', 3, 14, 2, 5); r('#6a3a1e', 6, 14, 2, 5); // bermuda e pernas
+    if (bola) { r('#f0f0f0', 8, 16, 3, 3); r('#1a1a1a', 9, 17); }
+  };
+  SPR.menino_bola = { img: paint(12, 19, (r) => { menino(r, true); r('#6a3a1e', 0, 6, 2, 4); r('#6a3a1e', 9, 6, 2, 4); }), wh: 3 };
+  SPR.menino_pipa = { img: paint(16, 34, (r, g) => {
+    g.translate(0, 15); menino(r, false); r('#6a3a1e', 9, 1, 2, 5); g.setTransform(1, 0, 0, 1, 0, 0);
+    g.strokeStyle = '#aaa'; g.lineWidth = 0.6; g.beginPath(); g.moveTo(10, 16); g.lineTo(12, 5); g.stroke();
+    g.fillStyle = '#e03a28'; g.beginPath(); g.moveTo(12, 0); g.lineTo(16, 4); g.lineTo(12, 8); g.lineTo(8, 4); g.fill();
+    r('#f8d038', 12, 0, 1, 8); r('#f8d038', 8, 4, 8, 1); r('#e03a28', 11, 8, 1, 3);
+  }), wh: 5.4 };
+  // bichos: 2 quadros de corrida, virados para a esquerda
+  const bicho = (w, h, fn) => ({ frames: [0, 1].map(f => paint(w, h, (r, g) => fn(r, g, f))) });
+  SPR.galinha = { ...bicho(12, 11, (r, g, f) => {
+    r('#f0f0f0', 2, 3, 8, 5); r('#d8d8d8', 8, 1, 3, 4); r('#f0f0f0', 1, 1, 4, 4); r('#d82830', 1, 0, 3, 1); r('#d82830', 2, 5, 1, 1);
+    r('#e8b830', 0, 2, 1, 1); r('#1a1a1a', 2, 2); r('#c8c8c8', 4, 5, 4, 2);
+    if (f) { r('#e8b830', 4, 8, 1, 3); r('#e8b830', 8, 8, 1, 3); } else { r('#e8b830', 5, 8, 1, 3); r('#e8b830', 7, 8, 1, 3); }
+  }), wh: 1.6 };
+  SPR.porco = { ...bicho(20, 12, (r, g, f) => {
+    r('#e89aa0', 4, 2, 15, 7); r('#f0b0b4', 5, 2, 12, 2); r('#e89aa0', 0, 3, 6, 6); r('#d07880', 0, 5, 2, 2); r('#1a1a1a', 3, 4);
+    r('#d07880', 3, 1, 2, 2); r('#d07880', 18, 2, 2, 1); r('#d07880', 19, 1);
+    r('#8a5a3a', 8, 5, 3, 2); r('#8a5a3a', 13, 3, 2, 2);                     // lama
+    const l = f ? [4, 8, 12, 16] : [5, 7, 13, 15]; for (const x of l) r('#c07078', x, 9, 2, 3);
+  }), wh: 2.6 };
+  SPR.vaca = { ...bicho(30, 20, (r, g, f) => {
+    r('#eeeae0', 6, 4, 22, 9); r('#1a1a1a', 10, 4, 6, 5); r('#1a1a1a', 20, 7, 5, 4); r('#1a1a1a', 25, 4, 3, 3);
+    r('#eeeae0', 0, 2, 7, 7); r('#1a1a1a', 3, 3, 3, 2); r('#e8a0a0', 0, 6, 3, 3); r('#e8e0c8', 1, 0, 1, 2); r('#e8e0c8', 5, 0, 1, 2);
+    r('#e8a0a0', 14, 13, 3, 2);                                              // úbere
+    r('#1a1a1a', 28, 5, 1, 7); r('#1a1a1a', 27, 11, 3, 2);                   // rabo
+    const l = f ? [7, 12, 21, 26] : [8, 11, 22, 25]; for (const x of l) r('#d8d4c8', x, 13, 2, 7);
+  }), wh: 5.5 };
+  for (const n of ['galinha', 'porco', 'vaca']) SPR[n].img = SPR[n].frames[0];
+  const gx = SPR.gantry.img.getContext('2d');
+  // "LARGADA" em fonte 3×5 no letreiro
+  const word = 'LARGADA'; gx.fillStyle = '#f8d038';
+  for (let i = 0; i < word.length; i++) { const g = GL[word[i]]; for (let b = 0; b < 15; b++) if (g[b] === '1') gx.fillRect(34 + i * 4 + (b % 3), 3 + ((b / 3) | 0), 1, 1); }
+}
+defaultSprites();
+const riderBase = riderSprite();
+const RIVALS = [{ hue: 115, num: 3 }, { hue: 48, num: 21 }, { hue: 205, num: 11 }];
+let rivalBase = RIVALS.map(v => hueRotate(riderBase, v.hue));
+// cartela importada do Nano Banana: linhas brutas (antes da paleta) e conjuntos prontos por paleta
+// lean/air: só o lado esquerdo, do reto ao forte (3 ou 5 poses); o jogo espelha o direito (5 ou 9 quadros)
+const ROWDEF = { lean: { expect: [3, 5], mirror: true }, angles: { expect: [7] }, air: { expect: [3, 5], mirror: true }, crash: { expect: [3] } };
+const rawRows = { lean: null, angles: null, air: null, crash: null };
+let riderSets = null, palettes = null;
+
+// ---------------------------------------------------------------- sky
+function defaultSky() {
+  // fim de tarde no interior: degradê em faixas pontilhadas (sem degradê liso), sol baixo, serra e mata no pé
+  const c = mk(SKYW, HZ), g = c.getContext('2d'), d = g.createImageData(SKYW, HZ), px = new Uint32Array(d.data.buffer);
+  const stops = [[0, [58, 52, 96]], [0.45, [150, 88, 104]], [0.75, [226, 136, 88]], [1, [246, 190, 118]]];
+  const at = t => { for (let k = 1; k < stops.length; k++) if (t <= stops[k][0]) { const [a, ca] = stops[k - 1], [b, cb] = stops[k]; return mix(ca, cb, (t - a) / (b - a)); } return stops[3][1]; };
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const SUNX = 300, SUNY = HZ - 30;
+  for (let y = 0; y < HZ; y++) for (let x = 0; x < SKYW; x++) {
+    let dx = Math.abs(x - SUNX); dx = Math.min(dx, SKYW - dx);
+    const glow = Math.max(0, 1 - Math.hypot(dx * 0.6, (y - SUNY) * 1.4) / 90);
+    const t = y / HZ, band = Math.floor(t * 14), fr = t * 14 - band, th = BAYER[(y & 3) * 4 + (x & 3)] / 16;
+    let col = at((band + (fr > th ? 1 : 0)) / 14);
+    col = mix(col, [255, 214, 140], glow * glow * 0.8);
+    px[y * SKYW + x] = pack(col[0] | 0, col[1] | 0, col[2] | 0);
+  }
+  g.putImageData(d, 0, 0);
+  g.fillStyle = '#fff0b8'; g.beginPath(); g.arc(SUNX, SUNY, 13, 0, 7); g.fill();
+  g.fillStyle = '#ffe08a'; for (let y = -13; y <= 13; y += 3) g.fillRect(SUNX - 14, SUNY + y, 28, 1);
+  // nuvens baixas e compridas, cor de fumaça
+  for (let k = 0; k < 11; k++) {
+    const x0 = (k * 131 + 40) % SKYW, y0 = 10 + (k * 29) % (HZ - 50), w = 50 + (k * 37) % 70;
+    g.fillStyle = '#8a5a78'; g.fillRect(x0, y0 + 2, w, 3); g.fillStyle = '#c47c7a'; g.fillRect(x0 + 6, y0, w - 16, 2); g.fillRect(x0 + 14, y0 - 2, w * 0.4, 2);
+  }
+  const P2 = Math.PI * 2 / SKYW;
+  for (let x = 0; x < SKYW; x++) {
+    const far = HZ - 26 + 9 * Math.sin(x * P2 * 3 + 1) + 5 * Math.sin(x * P2 * 8 + 2) + 3 * Math.sin(x * P2 * 17);
+    g.fillStyle = '#8e6680'; g.fillRect(x, far | 0, 1, HZ);
+    const mid = HZ - 15 + 5 * Math.sin(x * P2 * 5 + 4) + 3 * Math.sin(x * P2 * 13 + 1) + 2 * Math.sin(x * P2 * 29);
+    g.fillStyle = '#6a4a5a'; g.fillRect(x, mid | 0, 1, HZ);
+    const tl = HZ - 7 + 2.5 * Math.sin(x * P2 * 41) + 2 * Math.sin(x * P2 * 73 + 1) + 1.5 * Math.sin(x * P2 * 113 + 3) - (hash(x >> 3, 7) > 0.8 ? 4 * hash(x >> 1, 3) : 0);
+    g.fillStyle = '#3c3a2a'; g.fillRect(x, tl | 0, 1, HZ);
+    g.fillStyle = '#6a5a3a'; g.fillRect(x, tl | 0, 1, 1);
+  }
+  g.fillStyle = '#7a6a3c'; g.fillRect(0, HZ - 2, SKYW, 2);
+  return c;
+}
+let sky = defaultSky();
+
+// ---------------------------------------------------------------- world objects
+const objs = [];
+function buildObjects() {
+  objs.length = 0; seed = 99;
+  for (let i = 0; i < N; i++) {
+    const k = curv[i], nx = -ty[i], ny = tx[i];
+    const put = (type, lat) => objs.push({ type, x: cx[i] + nx * lat, y: cy[i] + ny * lat, z: 0 });
+    if (Math.abs(k) > 0.011 && i % 5 === 0) { const side = -Math.sign(k); put('tire', side * (HW + 4.5)); if (i % 10 === 0) put('tire', side * (HW + 7.5)); }
+    else if (i % 46 === 23 && Math.abs(k) < 0.006) put('hay', ((i / 46) & 1 ? 1 : -1) * (HW + 6));
+    if (i % 22 === 0) { put('stake', HW + 2); put('stake', -HW - 2); }
+  }
+  const at = (x, y) => dist[(clamp(y | 0, 0, TEX - 1)) * TEX + clamp(x | 0, 0, TEX - 1)];
+  let trees = 0, bushes = 0;
+  for (let t = 0; t < 4000 && (trees < 170 || bushes < 150); t++) {
+    const x = 12 + rnd() * 1000, y = 12 + rnd() * 1000;
+    if (inPit(x, y)) continue;
+    const d = at(x, y);
+    if (trees < 170 && d > HW + 24 && rnd() < 0.7) { objs.push({ type: 'tree', x, y, z: 0 }); trees++; }
+    else if (bushes < 150 && d > HW + 9) { objs.push({ type: 'bush', x, y, z: 0 }); bushes++; }
+  }
+  if (TRILHA_ATIVA) {
+  // trilha: vilarejos na beira (casebre, varal, entulho, bicicleta e meninos, sempre longe da pista)
+  const vilas = [];
+  for (let t = 0; t < 4000 && vilas.length < 7; t++) {
+    const x = 40 + rnd() * 944, y = 40 + rnd() * 944, d = at(x, y);
+    if (inPit(x, y) || d < HW + 26 || d > HW + 60 || vilas.some(v => Math.hypot(v[0] - x, v[1] - y) < 170)) continue;
+    vilas.push([x, y]);
+  }
+  const longe = (x, y, m) => at(x, y) > HW + m;
+  for (const [x, y] of vilas) {
+    objs.push({ type: 'casebre', x, y, z: 0 });
+    if (longe(x + 13, y + 5, 12)) objs.push({ type: 'varal', x: x + 13, y: y + 5, z: 0 });
+    if (longe(x - 11, y + 7, 10)) objs.push({ type: 'entulho', x: x - 11, y: y + 7, z: 0 });
+    if (rnd() < 0.6 && longe(x + 7, y - 9, 10)) objs.push({ type: 'bicicleta', x: x + 7, y: y - 9, z: 0 });
+    for (let k = 0; k < 2; k++) {                                            // meninos: nunca a menos de 14 da borda
+      const kx = x + (rnd() - 0.5) * 30, ky = y + (rnd() - 0.5) * 30;
+      if (longe(kx, ky, 14)) objs.push({ type: rnd() < 0.5 ? 'menino_bola' : 'menino_pipa', x: kx, y: ky, z: 0 });
+    }
+  }
+  let mand = 0;
+  for (let t = 0; t < 3000 && mand < 70; t++) {
+    const x = 12 + rnd() * 1000, y = 12 + rnd() * 1000;
+    if (!inPit(x, y) && at(x, y) > HW + 10) { objs.push({ type: 'mandacaru', x, y, z: 0 }); mand++; }
+  }
+  for (let i = 60, c = 0; i < N - 60 && c < 6; i += 37) {                    // carroças paradas nas retas
+    if (Math.abs(curv[i]) < 0.005 && hgt[i] < 0.01 && rnd() < 0.35) {
+      const lat = (rnd() < 0.5 ? -1 : 1) * (HW + 13);
+      objs.push({ type: 'carroca', x: cx[i] - ty[i] * lat, y: cy[i] + tx[i] * lat, z: 0 }); c++;
+    }
+  }
+  }
+  for (const [x, y] of [[596, 736], [640, 740], [686, 734]]) objs.push({ type: 'trailer', x, y, z: 0 });
+  for (let x = PIT.x0 + 6; x < PIT.x1; x += 12) objs.push({ type: 'fence', x, y: PIT.y1 - 2, z: 0 });
+  const gi = 4; objs.push({ type: 'gantry', x: cx[gi], y: cy[gi], z: 0, ww: 2 * HW + 8 });
+}
+buildObjects();
+
+// ---------------------------------------------------------------- bichos atravessando
+// r: raio de batida · vel: passo normal · fuga: quanto acelera com o ronco do 2T perto
+const BICHO = { galinha: { r: 1.6, vel: 7, fuga: 2.4, som: 'COCORICO!', pulo: 'PULOU A GALINHA!', pts: 200 },
+                porco: { r: 2.3, vel: 4.5, fuga: 1.9, som: 'OINC!', pulo: 'PULOU O PORCO!', pts: 300 },
+                vaca: { r: 3.4, vel: 2, fuga: 1.2, som: 'MUUU!', pulo: 'PULOU A VACA!', pts: 500 } };
+const bichos = [];
+function buildBichos() {
+  bichos.length = 0; seed = 777;
+  if (!TRILHA_ATIVA) return;
+  const tipos = ['galinha', 'vaca', 'porco', 'galinha', 'porco', 'vaca', 'galinha', 'porco'];
+  tipos.forEach((tipo, k) => {
+    let i = Math.floor(N * (k + 0.5) / tipos.length);
+    // longe de rampas, costelas e da largada
+    for (let t = 0; t < 300 && (hgt[wrap(i)] > 0.01 || hgt[wrap(i + 30)] > 0.01 || hgt[wrap(i - 30)] > 0.01 || i < 70 || i > N - 70); t++) i = wrap(i + 9);
+    const lado = rnd() < 0.5 ? -1 : 1;
+    bichos.push({ tipo, i0: i, lat: lado * (HW + 9), dir: -lado, estado: 'espera', t: rnd() * 5, z: 0, vz: 0, pulado: false, x: 0, y: 0 });
+  });
+}
+buildBichos();
+function penas(b, cor) {
+  for (let k = 0; k < 16; k++) parts.push({ x: b.x, y: b.y, z: 1 + rnd(), vx: (rnd() - 0.5) * 18, vy: (rnd() - 0.5) * 18, vz: 4 + rnd() * 8,
+    life: 0.9 + rnd() * 0.6, max: 1.5, s: 0.35 + rnd() * 0.3, c: cor || '240,240,236' });
+}
+function updateBichos(dt) {
+  for (const b of bichos) {
+    const B = BICHO[b.tipo]; b.t += dt; if (b.cd > 0) b.cd -= dt;
+    let ahead = b.i0 - P.idx; if (ahead < -N / 2) ahead += N; if (ahead > N / 2) ahead -= N;
+    if (b.estado === 'espera' && ahead > 30 && ahead < 150) b.estado = 'atravessando';
+    if (b.estado === 'atravessando' || b.estado === 'fugindo') {
+      b.lat += b.dir * B.vel * (Math.abs(ahead) < 45 ? B.fuga : 1) * (b.estado === 'fugindo' ? 2 : 1) * dt;
+      if (Math.sign(b.lat) === b.dir && Math.abs(b.lat) > HW + 10) { b.estado = 'espera'; b.lat = b.dir * (HW + 9); b.dir = -b.dir; b.pulado = false; }
+    } else if (b.estado === 'voando') {                                        // galinha batendo asa depois do susto
+      b.vz -= G * 0.35 * dt; b.z = Math.max(0, b.z + b.vz * dt); b.lat += b.dir * B.vel * 3 * dt;
+      if (rnd() < 0.3) penas(b);
+      if (b.z <= 0 && b.vz < 0) { b.estado = 'fugindo'; b.z = 0; }
+    }
+    const i = b.i0; b.x = cx[i] - ty[i] * b.lat; b.y = cy[i] + tx[i] * b.lat;
+  }
+}
+function batidaBichos() {
+  if (P.crash > 0) return;
+  for (const b of bichos) {
+    if (b.estado === 'espera' || b.cd > 0) continue;
+    const B = BICHO[b.tipo], d = Math.hypot(P.x - b.x, P.y - b.y);
+    if (d > B.r + 1.4) continue;
+    if (P.z - b.z > SPR[b.tipo].wh * 0.75) {                                 // passou por cima
+      if (P.air && !b.pulado && state === 'race') { b.pulado = true; const pts = B.pts * combo; score += pts; popups.push({ t: 1.4, text: B.pulo + ' +' + pts }); logEv('pulo-bicho', { bicho: b.tipo }); }
+      continue;
+    }
+    if (P.inv > 0) continue;
+    popups.push({ t: 1.1, text: B.som }); logEv('bicho', { bicho: b.tipo }); b.cd = 2;
+    if (b.tipo === 'galinha') { penas(b); b.estado = 'voando'; b.vz = 12; b.z = 0.5; P.v *= 0.85; P.inv = 0.5; }
+    else if (b.tipo === 'porco') { P.v *= 0.45; P.lean += Math.sign(P.lat - b.lat || 1) * 0.8; shake = 0.2; b.dir = Math.sign(b.lat - P.lat) || 1; b.estado = 'fugindo'; P.inv = 0.7; thump(); }
+    else { crash(P); }                                                        // a vaca não sai do lugar
+  }
+}
+// os rivais e o piloto automático desviam do bicho que estiver no caminho:
+// devolve a posição lateral de desvio (sempre dentro da pista) ou null
+function desvioBicho(idx, lat) {
+  for (const b of bichos) {
+    if (b.estado === 'espera' || Math.abs(b.lat) > HW) continue;
+    let ahead = b.i0 - idx; if (ahead < -N / 2) ahead += N; if (ahead > N / 2) ahead -= N;
+    if (ahead > 0 && ahead < 60 && Math.abs(b.lat - lat) < 7) {
+      const lado = b.lat > 0 ? -1 : 1;                                        // passa pelo lado mais largo
+      return clamp(b.lat + lado * 8, -HW + 3, HW - 3);
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- riders
+function makeRider(i0, lat, ai, look) {
+  const i = wrap(i0), a = Math.atan2(ty[i], tx[i]);
+  return { x: cx[i] - ty[i] * lat, y: cy[i] + tx[i] * lat, a, v: 0, z: 0, vz: 0, air: false, airT: 0, whip: 0, whipV: 0, maxWhip: 0, lean: 0,
+    idx: i, lat, prog: i0 - N, s: i0, ai, look, laneT: lat, laneTimer: 0, crash: 0, tumble: 0, inv: 0, skill: 1, finished: false };
+}
+let P, AIS;
+function resetRace() {
+  AIS = [makeRider(N - 10, -7, true, 0), makeRider(N - 10, 7, true, 1), makeRider(N - 24, -7, true, 2)];
+  AIS[0].skill = 0.95; AIS[1].skill = 0.9; AIS[2].skill = 0.97;
+  P = makeRider(N - 24, 7, false, -1);
+  score = 0; combo = 1; raceT = 0; popups.length = 0; parts.length = 0; if (typeof buildBichos === 'function') buildBichos();
+  camA = P.a; camX = P.x - Math.cos(camA) * CB; camY = P.y - Math.sin(camA) * CB; camH = CH;
+}
+let score = 0, combo = 1, raceT = 0, bestT = null;
+try { const b = localStorage.getItem('braaaap-best'); if (b) bestT = +b; } catch (e) {}
+const popups = [], parts = [];
+let camA = 0, camX = 0, camY = 0, camH = CH, shake = 0;
+let state = 'title', cd = 0, finishPlace = 0, gt = 0, lastBeep = 4;
+resetRace();
+
+function locate(r) {
+  let best = r.idx, bd = 1e9;
+  for (let k = -48; k <= 48; k++) {
+    const i = wrap(r.idx + k), dx = r.x - cx[i], dy = r.y - cy[i], d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  const dx = r.x - cx[best], dy = r.y - cy[best];
+  let delta = best - r.idx; if (delta < -N / 2) delta += N; if (delta > N / 2) delta -= N;
+  r.prog += delta; r.idx = best;
+  r.frac = dx * tx[best] + dy * ty[best];
+  r.lat = dx * -ty[best] + dy * tx[best];
+}
+function groundAt(i, frac, lat) {
+  const l = Math.abs(lat);
+  if (l >= HW + TALUDE_MAX) return 0;
+  const a = hgt[wrap(i)], b = frac >= 0 ? hgt[wrap(i + 1)] : hgt[wrap(i - 1)], h = a + (b - a) * Math.min(1, Math.abs(frac));
+  return beira(h, l);
+}
+function vertical(r, g, dt) {
+  if (!r.air) {
+    const zb = r.z + r.vz * dt - 0.5 * G * dt * dt;
+    if (zb > g + 0.12 && r.vz > 3) { r.air = true; r.z = zb; r.vz -= G * dt; r.airT = 0; r.maxWhip = 0; }
+    else { r.vz = clamp((g - r.z) / dt, -30, 60); r.z = g; }
+  } else {
+    r.vz -= G * dt; r.z += r.vz * dt; r.airT += dt;
+    if (r.z <= g) { r.z = g; r.air = false; r.vz = 0; land(r); }
+  }
+}
+function land(r) {
+  const big = r.airT > 0.35;
+  if (big) { for (let k = 0; k < 14; k++) puff(r, 2.2, 1.2); for (let k = 0; k < 16; k++) clod(r, 14, 12); }
+  if (r.ai) return;
+  if (r.airT > 0.45) logEv('pouso', { ar: +r.airT.toFixed(2), whip: +r.maxWhip.toFixed(2) });
+  if (big) { shake = 0.25; thump(); }
+  if (Math.abs(r.whip) > 0.62) { crash(r); return; }
+  if (r.airT > 0.45 && state === 'race') {
+    const pts = Math.round((r.airT * 120 + r.maxWhip * 420) / 10) * 10 * combo;
+    score += pts;
+    popups.push({ t: 1.4, text: (r.maxWhip > 0.35 ? 'WHIP! +' : 'AR +') + pts });
+    combo = Math.min(8, combo + 1);
+  }
+  r.whip = 0; r.whipV = 0; r.v *= 0.95;
+}
+function crash(r) {
+  r.crash = 1.3; r.tumble = 0; combo = 1; shake = 0.4; thump(); logEv('queda');
+  popups.push({ t: 1.2, text: 'CAIU!' });
+  for (let k = 0; k < 20; k++) puff(r, 2.6, 1.6); for (let k = 0; k < 26; k++) clod(r, 20, 16);
+}
+function respawn(r) {
+  const i = r.idx; r.x = cx[i]; r.y = cy[i]; r.a = Math.atan2(ty[i], tx[i]); r.v = 0; r.z = hgt[i]; r.vz = 0; r.air = false;
+  r.whip = 0; r.whipV = 0; r.inv = 1.2;
+}
+// partículas: 'clod' = torrão de terra (pesado, quica no chão), 'puff' = nuvem de poeira (cresce, sobe devagar e some)
+function clod(r, spread, up) {
+  const b = -Math.cos(r.a), c = -Math.sin(r.a), g = r.z;
+  parts.push({ t: 'clod', x: r.x + b * 1.2, y: r.y + c * 1.2, z: g + 0.3, g,
+    vx: b * (r.v * 0.35 + rnd() * 10) + (rnd() - .5) * spread, vy: c * (r.v * 0.35 + rnd() * 10) + (rnd() - .5) * spread,
+    vz: 4 + rnd() * up, life: 0.7 + rnd() * 0.5, max: 1.2, s: 0.28 + rnd() * 0.36, c: rnd() < 0.5 ? '92,40,22' : rnd() < 0.5 ? '128,58,30' : '60,30,20' });
+}
+function puff(r, spread, grow) {
+  const b = -Math.cos(r.a), c = -Math.sin(r.a);
+  parts.push({ t: 'puff', x: r.x + b * 1.5 + (rnd() - .5) * spread, y: r.y + c * 1.5 + (rnd() - .5) * spread, z: r.z + 0.4,
+    vx: b * r.v * 0.12 + (rnd() - .5) * 6, vy: c * r.v * 0.12 + (rnd() - .5) * 6, vz: 0.6 + rnd() * 1.4,
+    life: 1.1 + rnd() * 0.9, max: 2, s: 0.8 + rnd() * 0.8, grow: grow * (0.8 + rnd() * 0.8) });
+}
+// poeira ao andar: quanto mais rápido e mais acelerado, mais terra sai da roda de trás
+function roost(r, gas, onTrack, dt) {
+  if (r.v < 12) return;
+  const q = r.v / VMAX, near = !r.ai || Math.hypot(r.x - P.x, r.y - P.y) < 60;
+  if (rnd() < q * (onTrack ? 0.55 : 0.9)) puff(r, 1, 0.9 + q);
+  if (near && gas && rnd() < q * 1.4) clod(r, 6, 5);
+  if (near && gas && rnd() < q * 0.8) clod(r, 6, 5);
+}
+function dust(r, spread, up) { puff(r, spread, up / 10); }
+
+function updatePlayer(r, steer, gas, brake, dt) {
+  if (r.inv > 0) r.inv -= dt;
+  if (r.crash > 0) {
+    r.crash -= dt; r.v *= Math.pow(0.02, dt); r.tumble += dt * 10;
+    r.x += Math.cos(r.a) * r.v * dt; r.y += Math.sin(r.a) * r.v * dt; locate(r);
+    r.vz -= G * dt; r.z = Math.max(groundAt(r.idx, r.frac, r.lat), r.z + r.vz * dt);
+    if (r.crash <= 0) respawn(r);
+    return;
+  }
+  const onTrack = Math.abs(r.lat) < HW + 1;
+  const grip = aderenciaEm(r.lat);
+  const vmax = VMAX * grip * (r.ai ? r.skill : 1);
+  if (!r.air) {
+    if (gas) r.v += ACC * grip * (1 - r.v / vmax) * dt; else r.v -= 16 * dt;
+    if (brake) r.v -= 95 * (0.5 + 0.5 * grip) * dt;
+    if (r.v > vmax) r.v -= (r.v - vmax) * 2.5 * dt;
+    r.v = Math.max(0, r.v);
+    r.a += steer * TURN * grip * Math.min(1, r.v / 22) * (1 - 0.35 * r.v / VMAX) * dt;
+    r.whip += -r.whip * Math.min(1, dt * 10);
+    roost(r, gas, onTrack, dt);
+  } else {
+    r.a += steer * TURN * 0.25 * dt;
+    r.whipV += steer * 9 * dt; r.whipV *= Math.pow(0.25, dt);
+    r.whip += r.whipV * dt; r.whip -= r.whip * 0.9 * dt;
+    r.maxWhip = Math.max(r.maxWhip, Math.abs(r.whip));
+  }
+  r.lean += (steer - r.lean) * Math.min(1, dt * 8);
+  r.x += Math.cos(r.a) * r.v * dt; r.y += Math.sin(r.a) * r.v * dt;
+  locate(r);
+  if (Math.abs(r.lat) > HW + 44) { const k = (Math.abs(r.lat) - HW - 44) * Math.sign(r.lat); r.x -= -ty[r.idx] * k; r.y -= tx[r.idx] * k; r.v *= Math.pow(0.4, dt); }
+  vertical(r, groundAt(r.idx, r.frac, r.lat), dt);
+}
+function autopilot(r) {
+  const i = wrap(r.idx + 16), alvo = desvioBicho(r.idx, r.lat) ?? 0;
+  const tgx = cx[i] - ty[i] * alvo, tgy = cy[i] + tx[i] * alvo;
+  const d = angDiff(r.a, Math.atan2(tgy - r.y, tgx - r.x));
+  if (r.air) {   // no demo: joga a moto no whip na subida e endireita na descida
+    const reta = Math.abs(curv[wrap(r.idx + 30)]) + Math.abs(curv[wrap(r.idx + 60)]) < 0.008;   // só faz whip se pousar numa reta
+    const s = !DEMO || !reta ? 0 : r.airT < 0.16 && r.vz > 8 ? -1 : r.vz < 0 && r.whip < -0.08 ? 1 : 0;
+    return { steer: s, gas: 1, brake: 0 };
+  }
+  return { steer: clamp(d * 3, -1, 1), gas: Math.abs(d) < 0.8 ? 1 : 0, brake: 0 };
+}
+function updateAI(r, dt) {
+  const ahead = Math.abs(curv[wrap(r.idx + 22)]) + Math.abs(curv[wrap(r.idx + 36)]);
+  let target = VMAX * r.skill * (1 - Math.min(0.4, ahead * 11)) * aderenciaEm(r.lat);
+  if (state === 'race') { const diff = r.prog - P.prog; if (diff > 70) target *= 0.9; else if (diff < -90) target *= 1.08; }
+  if (!r.air) r.v += (target - r.v) * Math.min(1, dt * 1.4);
+  r.laneTimer -= dt;
+  if (r.laneTimer <= 0) { r.laneTimer = 1.5 + rnd() * 2.5; r.laneT = (rnd() - 0.5) * HW * 1.2; }
+  const desv = desvioBicho(r.idx, r.lat); if (desv !== null) r.laneT = desv;
+  r.lat += (r.laneT - r.lat) * Math.min(1, dt * 0.9);
+  r.s += r.v * dt; r.prog = r.s - N;
+  const i = wrap(Math.floor(r.s)), f = r.s - Math.floor(r.s), j = wrap(i + 1);
+  const px = cx[i] + (cx[j] - cx[i]) * f, py = cy[i] + (cy[j] - cy[i]) * f;
+  r.x = px - ty[i] * r.lat; r.y = py + tx[i] * r.lat;
+  const na = Math.atan2(ty[i], tx[i]); r.lean = clamp(angDiff(r.a, na) * 30, -1, 1); r.a = na; r.idx = i; r.frac = f;
+  if (!r.air) roost(r, true, Math.abs(r.lat) < HW + 1, dt);
+  vertical(r, groundAt(i, f, r.lat), dt);
+}
+
+// ---------------------------------------------------------------- input
+const inp = { left: false, right: false, up: false, down: false, gas: false, brake: false, carrega: false, solta: false, stick: null,
+  gasAnalog: 0, freioAnalog: 0, dirAnalog: 0, corpo: 0 };   // analógicos: controle USB (gatilhos e alavanca)   // stick: dedo arrastado na tela {x, y}
+const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', KeyX: 'gas', KeyZ: 'brake', KeyQ: 'carrega', KeyE: 'solta' };
+addEventListener('keydown', e => {
+  if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  const k = KEYMAP[e.code];
+  if (k) { fora[k] = true; e.preventDefault(); initAudio(); }
+  if (e.code === 'KeyG') painelControle(!painelAberto);
+  if (e.code === 'KeyT') ligaTeste(!TESTE.on);
+  if (e.code === 'KeyK' && state === 'race' && P.fis && !(P.fis.queda > 0) && !(P.remonta > 0)) { P.fis.queda = 2; P.fis.quedas++; }   // K: derruba (ver a queda e a volta para a moto)
+  if (e.code === 'KeyR') voltarJogadorAoTracado();
+  if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); initAudio(); pressStart(); }
+  if (e.code === 'KeyP') togglePause();
+  if (e.code === 'KeyM') toggleSound();
+  if (r3d && (e.code === 'Equal' || e.code === 'NumpadAdd')) r3d.zoom(-1);        // + aproxima
+  if (r3d && (e.code === 'Minus' || e.code === 'NumpadSubtract')) r3d.zoom(1);     // − afasta
+});
+addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) fora[k] = false; });
+addEventListener('blur', () => { for (const k in fora) fora[k] = false; });
+document.querySelectorAll('#pad button').forEach(b => {
+  const k = b.dataset.k;
+  const on = e => { e.preventDefault(); fora[k] = true; initAudio(); if (k === 'gas' && state !== 'race' && state !== 'countdown') pressStart(); try { b.setPointerCapture(e.pointerId); } catch (x) {} };
+  const off = () => { fora[k] = false; };
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+});
+cv.addEventListener('pointerdown', e => {
+  initAudio(); cv.focus();
+  if (state === 'title' || state === 'finish') { pressStart(); return; }
+  // controle de toque: o dedo arrastado a partir do ponto em que encostou vira a direção na tela
+  const x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+  try { cv.setPointerCapture(id); } catch (x) {}
+  const mover = m => { if (m.pointerId !== id) return; const dx = m.clientX - x0, dy = m.clientY - y0, l = Math.hypot(dx, dy); inp.stick = l > 12 ? { x: dx / l, y: -dy / l } : null; };
+  const soltar = m => { if (m.pointerId !== id) return; inp.stick = null; cv.removeEventListener('pointermove', mover); cv.removeEventListener('pointerup', soltar); cv.removeEventListener('pointercancel', soltar); };
+  cv.addEventListener('pointermove', mover); cv.addEventListener('pointerup', soltar); cv.addEventListener('pointercancel', soltar);
+});
+// teclado e botões de toque ficam em "fora"; o controle USB/Bluetooth entra por cima, sem apagar os outros
+const fora = {};
+const BOTOES_LIGADOS = ['left', 'right', 'up', 'down', 'gas', 'brake', 'carrega', 'solta'];
+let padPrev = false, padAtual = null;
+function escolhePad() {   // prefere o controle com mapeamento padrão (os índices de botão abaixo valem para ele)
+  const pads = navigator.getGamepads ? [...navigator.getGamepads()].filter(g => g && g.connected) : [];
+  return pads.find(g => g.mapping === 'standard') || pads[0] || null;
+}
+// Botões (aprovados pelo humano em 27/09, pensando no GameSir no modo PS4 = DualShock 4, mapeamento padrão):
+// R2 gás · L2 ou □ freio · alavanca esquerda: direção e corpo (para baixo carrega/peso atrás, para cima solta) ·
+// △ volta ao traçado · R1/L1 zoom · ✕ ou Options larga · Options pausa na corrida · Select/Share troca a câmera
+// (pedido do humano em 28/09; o painel do controle ficou na tecla G e no botão "Controle").
+const B = { X: 0, BOLA: 1, QUADRADO: 2, TRIANGULO: 3, L1: 4, R1: 5, L2: 6, R2: 7, SHARE: 8, OPTIONS: 9, CIMA: 12, BAIXO: 13, ESQ: 14, DIR: 15 };
+const padAnt = {};
+function pollPad() {
+  const gp = padAtual = escolhePad(), pad = {};
+  inp.gasAnalog = inp.freioAnalog = inp.dirAnalog = inp.corpo = 0;
+  if (gp) {
+    const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, bt = i => !!(gp.buttons[i] && gp.buttons[i].pressed), val = i => (gp.buttons[i] && gp.buttons[i].value) || 0;
+    const apertou = i => { const agora = bt(i), antes = padAnt[i]; padAnt[i] = agora; return agora && !antes; };   // só na descida do botão
+    pad.left = ax < -0.35 || bt(B.ESQ); pad.right = ax > 0.35 || bt(B.DIR);
+    inp.gasAnalog = val(B.R2);
+    inp.freioAnalog = val(B.L2); pad.brake = bt(B.QUADRADO);   // □ é botão: entra pela rampa, como o teclado
+    inp.dirAnalog = Math.abs(ax) > 0.12 ? Math.sign(ax) * ((Math.abs(ax) - 0.12) / 0.88) ** 1.6 : 0;
+    inp.corpo = Math.abs(ay) > 0.2 ? -ay : 0;
+    const correndo = state === 'race' || state === 'countdown';
+    if (apertou(B.X) && !correndo) pressStart();
+    if (apertou(B.OPTIONS)) { if (state === 'race') togglePause(); else if (!correndo) pressStart(); }
+    if (apertou(B.TRIANGULO)) voltarJogadorAoTracado();
+    if (apertou(B.R1) && r3d) r3d.zoom(-1);
+    if (apertou(B.L1) && r3d) r3d.zoom(1);
+    if (apertou(B.SHARE) && r3d) popups.push({ t: 1, text: 'CAMERA ' + { diagonal: 'DIAGONAL', fixa: 'FIXA', lado: 'DE LADO', tras: 'DE TRAS' }[r3d.trocaCamera()] });   // Select/Share: troca a câmera
+  }
+  for (const k of BOTOES_LIGADOS) inp[k] = !!fora[k] || !!pad[k];
+  // no teste, qualquer comando do humano assume a moto
+  if (TESTE.on && (BOTOES_LIGADOS.some(k => inp[k]) || inp.stick || inp.gasAnalog > 0.05 || inp.freioAnalog > 0.05 || inp.dirAnalog || inp.corpo)) TESTE.humanoAte = gt + 4;
+  if (painelAberto) desenhaPainelControle(gp);
+}
+// vibração do controle (Chrome e Edge; outros navegadores ignoram em silêncio)
+let vibraAte = 0;
+function vibra(forte, fraco, ms) {
+  const gp = padAtual, v = gp && gp.vibrationActuator, agora = performance.now();
+  if (!v || !v.playEffect || agora < vibraAte - 20) return;
+  vibraAte = agora + ms;
+  try { v.playEffect('dual-rumble', { duration: ms, strongMagnitude: forte, weakMagnitude: fraco }); } catch (e) {}
+}
+function voltarJogadorAoTracado() {   // △ ou R: tira a moto do capim ou de onde atolou, parada no eixo da pista
+  if (state !== 'race' || !P) return;
+  if (P.fis && FIS) { voltaAoTracado(P.fis, P.idx); P.inv = 1.2; }
+  else respawn(P);
+}
+// ---------------------------------------------------------------- painel de teste do controle (tecla G, botão "Controle" ou ?controle=1)
+let painelAberto = false, painelT = 0;
+const painel = document.createElement('div');
+painel.id = 'painelControle';
+painel.style.cssText = 'display:none;position:absolute;left:8px;top:8px;z-index:3;max-width:min(94%,560px);padding:10px 12px;background:rgba(10,6,4,.88);color:#f4e8d8;font:13px/1.45 ui-monospace,Menlo,monospace;border:1px solid #8a5a38;border-radius:6px;white-space:pre-wrap;pointer-events:none';
+document.getElementById('screen').appendChild(painel);
+function painelControle(abrir) {
+  painelAberto = abrir; painel.style.display = abrir ? 'block' : 'none';
+  const b = document.getElementById('btnControle'); if (b) b.setAttribute('aria-pressed', abrir);
+  if (abrir) desenhaPainelControle(escolhePad(), true);
+}
+function desenhaPainelControle(gp, ja) {
+  const agora = performance.now(); if (!ja && agora - painelT < 100) return; painelT = agora;
+  const pct = v => String(Math.round(v * 100)).padStart(3) + '%';
+  const e = typeof entradaLab !== 'undefined' ? entradaLab : { gas: 0, freio: 0, direcao: 0, corpo: 0 };
+  let t = 'TESTE DO CONTROLE (G fecha)\n';
+  const todos = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : [];
+  if (!gp) t += '\nNenhum controle encontrado.\nConecte o controle e APERTE QUALQUER BOTÃO: o navegador só mostra o controle depois de um toque.\n';
+  else {
+    t += `\nControle: ${gp.id}\nMapeamento: ${gp.mapping || '(nenhum)'}${gp.mapping === 'standard' ? ' ✓ padrão' : '  ⚠ não padrão: botões podem estar trocados. Mande um print deste painel.'}\n`;
+    if (todos.length > 1) t += `(${todos.length} controles conectados; usando o de índice ${gp.index})\n`;
+    t += '\nEixos: ' + [...gp.axes].map((v, i) => `${i}:${v.toFixed(2)}`).join('  ') + '\n';
+    const bs = [...gp.buttons].map((b, i) => (b.pressed || b.value > 0.05) ? `${i}(${b.value.toFixed(2)})` : null).filter(Boolean);
+    t += 'Botões apertados: ' + (bs.length ? bs.join(' ') : '—') + '\n';
+    t += '\nNo DualShock 4 (GameSir no modo PS4): R2 = 7 gás · L2 = 6 freio · □ = 2 freio · △ = 3 volta ao traçado · R1 = 5 / L1 = 4 zoom · ✕ = 0 larga · Options = 9 larga/pausa · Share/Select = 8 troca a câmera · alavanca esquerda = eixos 0 e 1\n';
+  }
+  t += `\nO jogo entende:\n  gás   ${pct(e.gas)}\n  freio ${pct(e.freio)}\n  direção ${(e.direcao >= 0 ? '+' : '') + e.direcao.toFixed(2)}  (− esquerda, + direita)\n  corpo   ${(e.corpo >= 0 ? '+' : '') + (e.corpo || 0).toFixed(2)}  (− carrega/para trás, + solta)`;
+  painel.textContent = t;
+}
+addEventListener('gamepadconnected', ev => { if (painelAberto) desenhaPainelControle(ev.gamepad, true); });
+if (/controle=1/.test(location.search)) setTimeout(() => painelControle(true), 0);
+function pressStart() {
+  if (state === 'title' || state === 'finish') { resetRace(); state = 'countdown'; cd = 3.2; lastBeep = 4; }
+}
+// #demo: corrida no piloto automático em tela cheia, para gravar vídeo (ferramentas/captura/gravar.mjs)
+const DEMO = location.hash.startsWith('#demo');   // #demo3d abre direto no visual 3D
+const EVENTS = [];
+const logEv = (tipo, extra) => { if (state === 'race') EVENTS.push({ t: +raceT.toFixed(3), tipo, ...extra }); };
+if (DEMO) {
+  document.body.classList.add('demo');
+  setTimeout(() => { resetRace(); state = 'countdown'; cd = 3.2; lastBeep = 4; }, 300);
+}
+let paused = false;
+// ---------------------------------------------------------------- modo 3D (r3d.js): mesma pista e física, desenhadas em 3D com acabamento de pixel
+let modo3d = false, r3d = null, r3dCarregando = null;
+const mundo = {
+  cx, cy, tx, ty, N, hgt, curv, HW, TEX, dist, nIdx, objs, parts, wrap, W, H, HZ, F, SKYW, RIVALS, beira, TALUDE_MAX,
+  get P() { return P; }, get AIS() { return AIS; },
+  tex: () => tex, sky: () => sky, cam: () => ({ a: camA, x: camX, y: camY }), CB: () => CB, CH: () => CH, shake: () => Math.max(0, shake),
+  chao(x, y) { const q = posTracado(x, y); return q ? groundAt(q.i, q.s - q.i, q.lat) : 0; },   // altura do chão (unidades do jogo) num ponto
+};
+// só existe o visual 3D (câmera fixa, resolução alta). O desenho 2D fica de reserva para aparelho sem WebGL.
+async function setModo(on) {
+  modo3d = on;
+  if (on && !r3d) {
+    try { r3d = await (r3dCarregando ||= import('./r3d.js').then(m => m.iniciar(mundo, document.getElementById('screen')))); }
+    catch (e) { console.error('3D indisponível, usando o desenho 2D:', e); modo3d = false; r3dCarregando = null; }
+  }
+}
+// ---------------------------------------------------------------- física do laboratório (prototipo/pilotagem/fisica.js)
+// O jogador pilota com a física do laboratório (prototipo-pilotagem/, do Claude do Mac): gás progressivo, freio único,
+// derrapagem, contraguidão, suspensão, saltos e quedas. Os rivais seguem na física simples. O laboratório usa metros,
+// x para a frente e y para a esquerda; o plano do jogo tem o y "invertido". K = unidades do jogo por metro.
+const K = 3.5;
+let FIS = null;
+import('./pilotagem/fisica.js').then(m => { FIS = m; }).catch(e => console.warn('física do laboratório indisponível; usando a antiga', e));
+const usaFisicaLab = () => !!FIS && !/fisica=antiga/.test(location.search);
+function alturaChaoM(xm, ym) {   // relevo da pista do jogo, em metros, no ponto do laboratório
+  const gx = xm * K, gy = -ym * K, ix = gx | 0, iy = gy | 0;
+  if (ix < 0 || iy < 0 || ix >= TEX || iy >= TEX || dist[iy * TEX + ix] > HW + 30) return 0;
+  const i = nIdx[iy * TEX + ix], dx = gx - cx[i], dy = gy - cy[i];
+  return groundAt(i, dx * tx[i] + dy * ty[i], dx * -ty[i] + dy * tx[i]) / K;
+}
+// Chão que a física do laboratório enxerga. Na borda de rampa com queda (kicker e duplo), a roda da frente passa do
+// lábio antes da de trás, e o modelo de duas rodas leria isso como um wheelie passando do ponto (queda na hora). Enquanto
+// a roda de trás não passa da borda, as duas enxergam a rampa continuando; quando ela passa, as duas estão no ar.
+function posTracado(gx, gy) {   // posição contínua ao longo do eixo (índice) e lateral, em unidades do jogo
+  const ix = gx | 0, iy = gy | 0;
+  if (ix < 0 || iy < 0 || ix >= TEX || iy >= TEX || dist[iy * TEX + ix] > HW + 30) return null;
+  const i = nIdx[iy * TEX + ix], dx = gx - cx[i], dy = gy - cy[i];
+  return { i, s: i + dx * tx[i] + dy * ty[i], lat: dx * -ty[i] + dy * tx[i] };
+}
+const difS = (a, b) => { let d = a - b; if (d < -N / 2) d += N; if (d > N / 2) d -= N; return d; };
+let LABIOS = null;
+// COSTELAS: empinando (alavanca para baixo com gás, nariz acima de ~6°) e acima de ~25 km/h, a roda de trás passa de
+// topo em topo sem cair nos vales: a física enxerga o envelope dos topos (liso), e a moto sai rápida e estável.
+// Sem empinar, a roda da frente bate na face de cada costela e a moto perde velocidade (costelasFreio).
+const COSTELAS = { vMin: 7, arfMin: 0.1, topo: 0.92, freio: 0.55 };
+function envelopeCostelas(r, s) {   // altura (unidades) dos topos no ponto s, ou null fora das costelas
+  for (const f of features) {
+    if (f.type !== 'whoops') continue;
+    const k = difS(s, f.i0), antes = f.per * 1.5;
+    if (k < -antes || k > f.len + antes) continue;
+    // sobe devagar desde antes da primeira até o topo dela (~4°, não vira trampolim) e desce igual depois da última
+    const borda = clamp(Math.min(k + antes, f.len + antes - k) / (antes + f.per / 2), 0, 1);
+    return f.h * COSTELAS.topo * borda;
+  }
+  return null;
+}
+function chaoDaMoto(r, xm, ym) {
+  const g = alturaChaoM(xm, ym), m = r.fis;
+  if (!m) return g;
+  if (r.skim > 0) {   // entra e sai aos poucos (~0,25 s): um degrau no chão debaixo da roda lança a moto
+    const q = posTracado(xm * K, -ym * K);
+    if (q && Math.abs(q.lat) <= HW) { const e = envelopeCostelas(r, q.s); if (e !== null) return g + Math.max(0, e / K - g) * r.skim; }
+  }
+  LABIOS ||= features.filter(f => f.type === 'kicker' || f.type === 'double').map(f => ({ s: wrap(f.i0 + bordaSalto(f)), h: f.h, sobe: f.h / (bordaSalto(f) + 1) }));
+  const q = posTracado(xm * K, -ym * K);
+  if (!q || Math.abs(q.lat) > HW) return g;
+  for (const L of LABIOS) {
+    const d = difS(q.s, L.s);
+    if (d <= 0 || d > 8) continue;   // entre-eixos (5,1 unidades) + a folga da roda de trás
+    const t = posTracado((m.x - Math.cos(m.rumo) * m.b) * K, -(m.y - Math.sin(m.rumo) * m.b) * K), dt = t ? difS(t.s, L.s) : 1;
+    if (dt <= 1.5 && dt > -12) return Math.max(g, (L.h + L.sobe * d) / K);   // a de trás ainda no lábio (1,5 de folga): as duas enxergam a rampa
+  }
+  return g;
+}
+const pisoEm = lat => { const a = Math.abs(lat); return a <= HW ? FIS.SUPERFICIES.batida : a <= HW + BORDA_SOLTA ? FIS.SUPERFICIES.solta : FIS.SUPERFICIES.capim; };
+const voltaAoTracado = (m, i) => FIS.reposiciona(m, cx[i] / K, -cy[i] / K, -Math.atan2(ty[i], tx[i]));
+const entradaLab = { gas: 0, freio: 0, direcao: 0, corpo: 0 };
+function lerEntradaLab(dt) {   // teclado: o gás sobe aos poucos; controle USB: analógico
+  const e = entradaLab, rampa = (v, alvo, sobe, desce) => v + clamp(alvo - v, -dt * desce, dt * sobe);
+  e.gas = inp.gasAnalog > 0.02 ? inp.gasAnalog : rampa(e.gas, inp.up || inp.gas ? 1 : 0, 1.6, 3);
+  // freio: gatilho L2 analógico (dosa de 0 a 100%); botão (□, seta, Z) sobe em ~0,2 s e solta em ~0,1 s
+  const freioBotao = inp.down || inp.brake ? 1 : 0;
+  e.freio = inp.freioAnalog > 0.02 && !freioBotao ? inp.freioAnalog : rampa(e.freio, Math.max(freioBotao, inp.freioAnalog), 5, 10);
+  const d = inp.stick ? clamp(inp.stick.x * 1.4, -1, 1) : (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+  e.direcao = Math.abs(inp.dirAnalog) > 0 ? inp.dirAnalog : rampa(e.direcao, d, 4, 4);
+  e.corpo = inp.corpo || ((inp.solta ? 1 : 0) - (inp.carrega ? 1 : 0));
+  return assistenciaCurva(P, e);
+}
+// Assistência de pilotagem (arcade): com gás cheio a moto chegava na curva (e nas costelas) a 80–90 km/h, o pneu não
+// segurava e ela saía reto pela borda (o robô de gás cheio saía da pista 21 vezes em 110 s). O piloto agora:
+//  - não acelera acima da velocidade que dá para fazer o que vem adiante (a mesma conta do automático, com folga):
+//    fecha o gás sozinho antes da curva, do salto e das costelas, também no ar;
+//  - se você está virando e a moto vem rápida demais para a curva (pela pista adiante ou pelo quanto a alavanca
+//    vira), dá um toque de freio. Frear você mesmo antes continua sendo mais rápido.
+// ?assist=0 desliga.
+const ASSIST = { on: !/assist=0/.test(location.search), folga: 1.12, vReta: 27, vCurva: 9.5, expoente: 1.4 };
+function assistenciaCurva(r, e) {
+  const m = r.fis;
+  if (!ASSIST.on || !m) return e;
+  const dir = Math.abs(e.direcao || 0), u = m.u;
+  // costelas adiante ou embaixo: empinando, o gás é seu (a traseira desliza pelos topos); sem empinar, freia antes
+  const obC = obstaculoEm(r.idx, 90, 0), costelas = obC && obC.f.type === 'whoops';
+  if (costelas && (e.corpo || 0) <= -0.5) return e;
+  const vPista = velocidadeAlvo(r, Math.max(0, u)) * ASSIST.folga;
+  if (u > vPista) e.gas = Math.min(e.gas, clamp(0.35 - (u - vPista) * 0.1, 0.1, 0.35));   // um fio de gás segura a traseira
+  if (costelas && m.noChao && u > vPista + 1) e.freio = Math.max(e.freio || 0, clamp((u - vPista) / 5, 0, 0.6));
+  if (m.noChao && dir >= 0.2) {
+    const piso = Math.abs(r.lat) <= HW ? 1 : Math.abs(r.lat) <= HW + BORDA_SOLTA ? 0.85 : 0.72;
+    const vDir = (ASSIST.vReta + (ASSIST.vCurva - ASSIST.vReta) * ((dir - 0.2) / 0.8) ** ASSIST.expoente) * piso;
+    const excesso = u - Math.min(vDir, vPista);
+    if (excesso > 0) e.gas = Math.min(e.gas, clamp(0.35 - excesso * 0.15, 0.05, 0.35));
+    if (excesso > 1.5) e.freio = Math.max(e.freio || 0, clamp((excesso - 1.5) / 6, 0, 0.5));
+  }
+  return e;
+}
+// ---------------------------------------------------------------- piloto automático (modo Teste, #demo e fim de corrida)
+// Pilota como gente, conforme docs/pesquisa/PILOTAGEM-REAL.md: freia com a moto reta antes da curva (em pé, peso atrás),
+// deita sentado na curva, põe o pé para fora na curva fechada, empina na saída de curva lenta, fica em pé nas costelas,
+// carrega a suspensão antes da rampa e chega em cada salto na velocidade de pousar na descida.
+const AP = {
+  mu: 0.62,              // quanto da aderência lateral o automático usa na curva (terra batida; na solta e no capim, proporcional)
+  freia: 6.5,            // m/s² de desaceleração planejada; a moto freia ~9 com freio 0,5 em linha reta (sobra margem)
+  vMax: 26,              // m/s na reta
+  // m/s na borda de cada salto, na ordem de features (costelas = null): curto no kicker que pousa na curva,
+  // e no duplo a velocidade de pousar na descida
+  // (medido no BRAAAP.simular: duplo a 10,5 pousa no meio da descida; kicker de 2 m sem carga passa ~1,3 m acima do lábio)
+  salto: [null, 10.5, 10.5, 12, null, 10],
+  costelas: 14,          // m/s nas costelas (~50 km/h): entra empinando e a traseira desliza pelos topos (COSTELAS)
+  carga: [null, true, false, true, null, false],   // carrega a suspensão antes da borda e solta nela (a carga soma ~0,8 m de altura)
+  derrapa: 0,            // gás que solta a traseira na saída da curva (powerslide); desligado: o humano não quer drift (28/09)
+};
+// trecho da pista em que o índice está: obstáculo e a distância desde o começo dele (null fora dos obstáculos)
+function obstaculoEm(i, antes = 0, depois = 0) {
+  for (const f of features) {
+    let k = i - f.i0; if (k < -N / 2) k += N; if (k > N / 2) k -= N;
+    if (k >= -antes && k < featLen(f) + depois) return { f, k };
+  }
+  return null;
+}
+const bordaSalto = f => f.type === 'kicker' ? 17 : 13;   // índice da borda (fim da subida), contado do começo do obstáculo
+// limite de velocidade de cada ponto da pista (m/s): curva pelo raio, salto e costelas pela velocidade combinada.
+// VOO marca o trecho que a moto passa no ar depois de cada borda: ali não dá para frear.
+const VLIM = new Float32Array(N), VOO = new Uint8Array(N), RETA = new Uint8Array(N);   // RETA: trecho em que dá para frear
+function planejaVelocidades() {
+  VOO.fill(0);
+  for (let i = 0; i < N; i++) {
+    let k = 0; for (let j = -3; j <= 3; j++) k = Math.max(k, Math.abs(curv[wrap(i + j)]));
+    VLIM[i] = Math.min(AP.vMax, Math.sqrt(AP.mu * 9.81 / Math.max(k, 1e-4) / K));
+    RETA[i] = k < 0.004 ? 1 : 0;                                  // raio acima de ~70 m
+  }
+  features.forEach((f, n) => {
+    if (f.type === 'whoops') { for (let k = -6; k < f.len + 4; k++) VLIM[wrap(f.i0 + k)] = Math.min(VLIM[wrap(f.i0 + k)], AP.costelas); return; }
+    const v = AP.salto[n], b = bordaSalto(f);
+    for (let k = 0; k <= b; k++) VLIM[wrap(f.i0 + k)] = Math.min(VLIM[wrap(f.i0 + k)], v);
+    // voo balístico até a altura zero: t = (v·senθ + √((v·senθ)² + 2gH)) / g
+    const th = Math.atan(f.h / (b + 1)), H = f.h / K, vs = v * Math.sin(th), t = (vs + Math.sqrt(vs * vs + 2 * 9.81 * H)) / 9.81;
+    for (let k = 1, L = Math.round(v * Math.cos(th) * t * K); k <= L; k++) VOO[wrap(f.i0 + b + k)] = 1;
+  });
+}
+planejaVelocidades();
+const ap = { wheelie: 0, ultimoWheelie: -99, vAlvo: 0, fase: '', freando: false };
+// velocidade (m/s) que dá para ter agora e ainda fazer tudo o que vem adiante (curvas, saltos, costelas)
+function velocidadeAlvo(r, u) {
+  const piso = Math.abs(r.lat) <= HW ? 1 : Math.abs(r.lat) <= HW + BORDA_SOLTA ? 0.87 : 0.75;   // terra solta e capim seguram menos
+  let vAlvo = AP.vMax, E = 0;
+  for (let k = 0; k < 400; k += 2) {
+    const j = wrap(r.idx + k);
+    if (k) { const ay = u * u * Math.abs(curv[j]) * K; E += (VOO[j] ? 0.3 : ay < 2 ? AP.freia : ay < 4 ? 3 : 1.5) * 2 / K; }
+    const vl = VLIM[j] * piso, v = Math.sqrt(vl * vl + 2 * E); if (v < vAlvo) vAlvo = v;
+  }
+  return vAlvo;
+}
+// Jogador robô (só no teste: BRAAAP.simular(s, ajustes, trilha, robo)): joga como gente no controle, sem a
+// inteligência do automático. robo = { gas: 0..1 (gatilho fixo), freia: true para frear antes das curvas fechadas }.
+// Aponta a alavanca para o eixo da pista, adiante; serve para medir se uma volta sai com o jeito comum de jogar.
+let ROBO = null;
+function jogadorRobo(r, cfg) {
+  const m = r.fis, u = m ? Math.max(0, m.u) : 0;
+  const i = wrap(r.idx + Math.round(10 + u * K * 0.5));
+  const d = angDiff(r.a, Math.atan2(cy[i] - r.y, cx[i] - r.x));
+  let freio = 0;
+  if (cfg.freia) { let k = 0; for (let j = 8; j < 60; j += 4) k = Math.max(k, Math.abs(curv[wrap(r.idx + j)])); if (k > 0.02 && u > 12) freio = 0.6; }
+  const obC = cfg.empina && obstaculoEm(r.idx, 16, 0), corpo = obC && obC.f.type === 'whoops' ? -1 : 0;   // empina nas costelas
+  return assistenciaCurva(r, { gas: freio ? 0 : cfg.gas ?? 1, freio, direcao: clamp(d * 2.5, -1, 1), corpo });
+}
+function autopilotoLab(r, dt = STEP) {
+  const m = r.fis, u = m ? Math.max(0, m.u) : 0, S = r.sinais;
+  // direção: persegue um ponto do eixo da pista, mais longe quanto mais rápido
+  const i = wrap(r.idx + Math.round(10 + u * K * 0.5));
+  const d = angDiff(r.a, Math.atan2(cy[i] - r.y, cx[i] - r.x));
+  let direcao = clamp(d * 1.8, -1, 1);
+  // velocidade alvo: o limite de cada ponto adiante, descontada a distância de frenagem até lá (v² = v0² + 2·a·d);
+  // o trecho no ar não conta como distância de frenagem
+  // Velocidade alvo: o limite de cada ponto adiante, descontado o quanto dá para perder de velocidade até lá.
+  // Na física do laboratório, frear com a moto deitada (ou fechar o gás) faz a traseira escapar e a moto rodar; então
+  // a desaceleração possível depende da curva: reta ~6,5 m/s² (freio forte), curva aberta ~3 (freio de trás com um
+  // fio de gás), curva fechada ~1,5 (só o fio de gás), no ar quase nada.
+  const vAlvo = ap.vAlvo = velocidadeAlvo(r, u);
+  let gas, freio = 0, freioT = null, corpo = 0;
+  const excesso = u - vAlvo, inc = S ? Math.abs(S.inclinacao) : 0, chao = !S || S.noChao;
+  // freada forte, uma vez só, com a moto em pé e reta (é aí que o piloto fica de pé com o peso atrás)
+  const reto = Math.abs(d) < (ap.freando ? 0.14 : 0.1) && inc < (ap.freando ? 0.3 : 0.18) && chao;
+  ap.freando = reto && (ap.freando ? excesso > -0.6 : excesso > 0.3);
+  if (ap.freando) { freio = clamp(0.4 + excesso * 0.1, 0.4, 0.55); gas = 0; direcao = clamp(direcao, -0.04, 0.04); ap.fase = 'freando'; }
+  else if (excesso > 0.3 && inc < 0.45 && chao) { gas = 0.1; freio = freioT = 0.25; ap.fase = 'freio de trás na curva'; }
+  else if (excesso > 0.3) { gas = 0.1; ap.fase = 'curva'; }
+  else { gas = clamp(0.3 - excesso * 0.35, 0.2, 1); ap.fase = Math.abs(direcao) > 0.35 ? 'curva' : 'reta'; }
+  if (freio && m && u > 3 && m.wF * m.p.raioF < u * 0.85) freio *= 0.6;          // a roda da frente travando: alivia (ABS de piloto)
+  // derrapagem controlada na saída da curva: deitado e sentado, abre o gás até a traseira sair ~15° e segura no gás
+  if (!freio && AP.derrapa && S && chao && inc > 0.3 && excesso < -0.3) {
+    gas = Math.abs(S.deriva || 0) < 0.26 ? AP.derrapa : 0.45; ap.fase = 'derrapando na saída';
+  }
+  else if (!freio && S && S.patinagem > 0.6 && Math.abs(S.inclinacao) > 0.3) gas = Math.max(0.2, gas * 0.6);   // traseira patinando deitada
+  if (!freio && S && Math.abs(S.deriva) > 0.3) { gas = 0.25; direcao = clamp(direcao, -0.3, 0.3); ap.fase = 'segurando a derrapagem'; }
+  // salto: carrega a suspensão antes da borda e solta nela; no ar, gás leve e deixa a moto alinhar com o pouso
+  const ob = obstaculoEm(r.idx, 30, 0);
+  if (ob && ob.f.type !== 'whoops' && AP.carga[features.indexOf(ob.f)]) {
+    const borda = bordaSalto(ob.f);
+    if (ob.k >= borda - 22 && ob.k < borda - 3) { corpo = -1; ap.fase = 'carga'; }
+    else if (ob.k >= borda - 3 && ob.k <= borda + 1) { corpo = 1; ap.fase = 'solta'; }
+  }
+  if (S && !S.noChao) { gas = 0.3; freio = 0; ap.fase = 'no ar'; }
+  // wheelie na saída de curva lenta, com reta livre à frente
+  if (ap.wheelie > 0) {
+    ap.wheelie -= dt; corpo = -1; gas = 1; freio = 0; direcao = clamp(direcao, -0.15, 0.15); ap.fase = 'wheelie';
+    if (!S || !S.noChao || S.arfagem > 0.75 || Math.abs(d) > 0.2) ap.wheelie = 0;
+  } else if (S && S.noChao && u > 6 && u < 13 && gt - ap.ultimoWheelie > 6 && vAlvo > u + 4 && !obstaculoEm(r.idx, 55, 0)
+    && Math.abs(r.lat) < HW - 3 && Math.abs(S.inclinacao) < 0.2 && Math.abs(d) < 0.15) {
+    let livre = true;
+    for (let k = 0; k < 35 && livre; k += 3) if (Math.abs(curv[wrap(r.idx + k)]) > 0.009) livre = false;   // raio acima de ~32 m
+    if (livre) { ap.wheelie = 1.1; ap.ultimoWheelie = gt; }
+  }
+  // costelas: empina um pouco antes da primeira e segura com gás até a última (a traseira desliza pelos topos)
+  const obC = obstaculoEm(r.idx, 16, 0);
+  if (obC && obC.f.type === 'whoops' && u > COSTELAS.vMin - 1) {
+    corpo = -1; gas = u < Math.min(AP.costelas, vAlvo) ? 1 : 0.3; freio = 0; freioT = null; ap.fase = 'costelas empinando';   // gás cheio só até a velocidade da curva que vem depois
+  }
+  return freioT !== null && freio ? { gas, freio, freioF: 0, freioT: freio, direcao, corpo } : { gas, freio, direcao, corpo };
+}
+// Em pé ou sentado, conforme docs/pesquisa/PILOTAGEM-REAL.md. A física do laboratório já põe em pé na freada em reta
+// e na reta rápida, e senta na curva e devagar. Aqui entra o que depende da pista do jogo: em pé (posição de ataque)
+// quando vêm costelas, rampa ou mesa (absorver o terreno; sentado, o pouso duro "chuta" o piloto) e durante o voo.
+function posturaEmPe(r, ent, S, dt) {
+  let relevo = 0;
+  if (Math.abs(r.lat) < HW + 1) for (let k = -4; k < 40; k += 2) relevo = Math.max(relevo, Math.abs(hgt[wrap(r.idx + k + 2)] - hgt[wrap(r.idx + k)]));
+  // em pé por padrão, como nos vídeos de referência (MX vs ATV) e na pesquisa: retas, saltos, costelas e freada em pé;
+  // senta só no meio da curva funda (moto deitada > ~24°, ou curva fechada devagar) e levanta logo na saída (< ~17°)
+  const inc = Math.abs(S.inclinacao), vel = S.velocidade || 0;
+  let alvo = 1;
+  if (relevo > 0.15 || !S.noChao) alvo = 1;
+  else if (vel < 2) alvo = 0;                                                        // quase parado: senta
+  else if (inc > (r.sentado ? 0.3 : 0.42) || (Math.abs(ent.direcao || 0) > 0.6 && vel < 9)) alvo = 0;   // curva aberta: em pé (curva_em_pe)
+  r.sentado = alvo === 0;
+  if (r.emPe === undefined) r.emPe = alvo;
+  r.emPe += (alvo - r.emPe) * Math.min(1, dt / 0.3);        // transição de ~0,3 s, sem saltar de pose
+  S.emPe = r.emPe;
+}
+const REMONTA = 1.8;   // s para levantar, erguer a moto e subir de volta
+// No jogo a física tem a dosagem de freio e a estabilidade de guinada ligadas (ver fisica.js): sem elas, 20% de freio
+// com um pouco de direção rodava a moto. Com elas, freio em reta ~9 m/s², na curva 5–10 m/s² com a traseira
+// escorregando uns 15°, e nenhuma combinação de freio e direção roda a moto no chão. ?fisica=crua desliga, para comparar.
+const PARAM_JOGO = /fisica=crua/.test(location.search) ? {} : { dosagemFreio: 1, estabilidadeGuinada: 4 };
+function atualizarJogadorLab(r, ent, dt) {
+  if (!r.fis) { r.fis = FIS.criarMoto({ x: r.x / K, y: -r.y / K, rumo: -r.a, alturaChao: (x, y) => chaoDaMoto(r, x, y), parametros: PARAM_JOGO }); r.quedas = 0; }
+  const m = r.fis, antesNoAr = r.air;
+  if (r.inv > 0) r.inv -= dt;
+  // depois da queda o piloto levanta, ergue a moto e sobe (r3d.js anima): a moto fica parada e o comando não vale
+  if (r.remonta > 0) { r.remonta -= dt; ent = { gas: 0, freio: 1, direcao: 0, corpo: 0 }; }
+  const inclAntes = m.inclinacao;
+  // costelas: empinando e rápido, desliza pelos topos; senão a frente bate em cada face e a moto perde velocidade
+  const naCostela = Math.abs(r.lat) <= HW && envelopeCostelas(r, r.idx + r.frac) !== null;
+  const empinando = (ent.corpo || 0) <= -0.5 && m.th > COSTELAS.arfMin;
+  r.deslizando = naCostela && m.u > COSTELAS.vMin && (empinando || (r.deslizando && (ent.corpo || 0) < 0 && (m.th > 0.03 || !m.noChao)));
+  if (naCostela && !r.deslizando && m.frenteNoChao && hgt[wrap(r.idx + 2)] > hgt[wrap(r.idx)] + 0.1) m.u *= Math.exp(-COSTELAS.freio * dt);
+  // a alavanca para baixo também carrega a suspensão (para o salto); deslizando nas costelas essa carga soltava em
+  // cada topo e jogava a moto a 3 m de altura
+  if (naCostela && (r.deslizando || (ent.corpo || 0) <= -0.5)) m.preload = 0;
+  r.skim = clamp((r.skim || 0) + (r.deslizando ? dt : -dt) * 4, 0, 1);
+  FIS.avanca(m, ent, pisoEm(r.lat), dt);
+  if (m.caiu) {   // levanta onde caiu (no capim, na beira da pista), com a moto apontada para o traçado
+    const lat = Math.abs(r.lat) > HW + BORDA_SOLTA ? Math.sign(r.lat) * (HW - 2) : r.lat, i = r.idx;
+    FIS.reposiciona(m, (cx[i] - ty[i] * lat) / K, -(cy[i] + tx[i] * lat) / K, -Math.atan2(ty[i], tx[i]));
+    r.remonta = REMONTA; r.inv = REMONTA + 0.6;
+  }
+  if (m.quedas !== r.quedas) {
+    r.quedas = m.quedas; r.quedaLado = Math.sign(inclAntes) || 1;   // cai para o lado em que a moto estava deitada
+    combo = 1; shake = 0.4; thump(); logEv('queda'); popups.push({ t: 1.2, text: 'CAIU!' }); for (let k = 0; k < 20; k++) puff(r, 2.6, 1.6); vibra(1, 1, 450);
+  }
+  r.x = m.x * K; r.y = -m.y * K; r.a = -m.rumo; r.v = Math.max(0, m.u) * K;
+  locate(r);
+  if (Math.abs(r.lat) > HW + 44) { voltaAoTracado(m, r.idx); r.x = m.x * K; r.y = -m.y * K; r.a = -m.rumo; locate(r); }
+  r.z = Math.max(groundAt(r.idx, r.frac, r.lat), (m.z - m.p.cgAltura) * K);
+  r.air = !m.noChao;
+  r.lean = clamp(-m.inclinacao / 0.6, -1, 1);
+  r.crash = m.queda > 0 ? m.queda : 0; if (m.queda > 0) r.tumble = (r.tumble || 0) + dt * 5;
+  r.sinais = FIS.sinais(m);
+  posturaEmPe(r, ent, r.sinais, dt);
+  r.corpoAtras = Math.max(0, -(ent.corpo || 0));   // alavanca para baixo / Q: corpo para trás
+  if (r.air) { if (!antesNoAr) { r.airT = 0; r.maxWhip = 0; r.whipLado = -(r.whipLado || 1); } r.airT += dt; }
+  // whip/scrub visual (a física do laboratório não gira a moto no ar): na subida joga a moto de lado, na descida
+  // endireita antes do pouso (PILOTAGEM-REAL.md ficha 10). Humano: direção apertada no ar. Automático: alterna os lados.
+  {
+    const subindo = (r.sinais.altura - (r.altAnt ?? r.sinais.altura)) > 0; r.altAnt = r.sinais.altura;
+    let alvoW = 0;
+    if (r.air && m.queda <= 0) {
+      if (humanoPilotando() || !TESTE.on) alvoW = clamp(ent.direcao || 0, -1, 1) * 0.55 * (subindo || r.airT < 0.25 ? 1 : 0.3);
+      else if (r.airT < 0.9) alvoW = subindo ? r.whipLado * 0.5 : 0;
+    }
+    r.whip = (r.whip || 0) + (alvoW - (r.whip || 0)) * Math.min(1, dt * (alvoW ? 5 : 7));
+    r.maxWhip = Math.max(r.maxWhip || 0, Math.abs(r.whip));
+  }
+  if (!r.air && antesNoAr) {   // pouso: terra, tranco e pontos pelo tempo no ar
+    if (r.airT > 0.35) { for (let k = 0; k < 14; k++) puff(r, 2.2, 1.2); for (let k = 0; k < 16; k++) clod(r, 14, 12); shake = 0.25; thump(); vibra(Math.min(1, 0.3 + r.airT * 0.5), 0.5, 180); }
+    if (r.airT > 0.45 && state === 'race' && m.queda <= 0) {
+      const pts = Math.round(r.airT * 120 / 10) * 10 * combo; score += pts;
+      popups.push({ t: 1.4, text: 'AR +' + pts }); combo = Math.min(8, combo + 1); logEv('pouso', { ar: +r.airT.toFixed(2) });
+    }
+  }
+  if (!r.air) roost(r, ent.gas > 0.3, Math.abs(r.lat) < HW + 1, dt);
+  if (!r.air && Math.abs(r.lat) < HW + 1 && Math.abs(hgt[wrap(r.idx + 1)] - hgt[r.idx]) > 0.05 && m.u > 3) vibra(0.05, 0.22, 70);   // costelas: tremidinha
+  observaTeste(r, ent, dt);
+}
+// ---------------------------------------------------------------- modo Teste (botão "Teste", tecla T ou #teste)
+// O piloto automático corre em loop e o placar marca cada movimento combinado do piloto (PLANO.md, meta da Demo 1) e
+// cada queda, com o motivo. O humano assiste e aponta o que não está certo. Qualquer comando dele assume a moto;
+// 4 s sem mexer em nada, o automático volta. BRAAAP.simular(s) roda o mesmo teste sem desenhar, para medir rápido.
+const MOVIMENTOS = [
+  ['curvaE', 'curva à esquerda, moto deitada'], ['curvaD', 'curva à direita, moto deitada'],
+  ['sentado', 'sentado na curva'], ['peFora', 'curva fechada com o pé para fora'],
+  ['emPeReta', 'em pé na reta rápida'], ['freada', 'freada em pé, peso atrás'],
+  ['emPeCostelas', 'em pé nas costelas'], ['carga', 'carga da suspensão antes do salto'],
+  ['voo', 'salto'], ['pouso', 'pouso afundando a suspensão'], ['wheelie', 'wheelie na saída da curva'],
+];
+const TESTE = { on: false, mov: {}, quedas: [], voltas: 0, voltasLimpas: 0, quedasVolta: 0, voltaAtual: 0, inicioVolta: 0, tempos: [],
+  corridas: 0, humanoAte: -1, fimT: 0, foraT: 0, atolos: 0, paradoT: 0, noArT: 0, ultimoVoo: -9, amostras: [], quedasFis: 0 };
+function zeraTeste() {
+  Object.assign(TESTE, { mov: {}, quedas: [], voltas: 0, voltasLimpas: 0, quedasVolta: 0, voltaAtual: 0, inicioVolta: 0, tempos: [], corridas: 0,
+    humanoAte: -1, fimT: 0, foraT: 0, atolos: 0, paradoT: 0, noArT: 0, ultimoVoo: -9, amostras: [], quedasFis: 0 });
+  for (const [k] of MOVIMENTOS) TESTE.mov[k] = { n: 0, ativoT: 0, contado: false, visto: -9 };
+}
+zeraTeste();
+const humanoPilotando = () => gt < TESTE.humanoAte;
+// conta um movimento quando a condição dura pelo menos "min" segundos; conta de novo só depois que ela acabar
+function marca(k, cond, dt, min = 0.25) {
+  const v = TESTE.mov[k];
+  if (!cond) { v.ativoT = 0; v.contado = false; return; }
+  v.ativoT += dt; v.visto = gt;
+  if (!v.contado && v.ativoT >= min) { v.contado = true; v.n++; }
+}
+function nomeTrecho(i) {
+  const ob = obstaculoEm(i, 12, 30);
+  if (ob) { const n = features.filter(f => f.type === ob.f.type).indexOf(ob.f) + 1; return { whoops: 'costelas', kicker: 'rampa', double: 'duplo', table: 'mesa' }[ob.f.type] + ' ' + n; }
+  let k = 0; for (let j = -10; j <= 10; j++) k = Math.max(k, Math.abs(curv[wrap(i + j)]));
+  return k > 0.02 ? 'curva fechada' : k > 0.008 ? 'curva' : 'reta';
+}
+function observaTeste(r, ent, dt) {
+  if (r !== P || state !== 'race') return;
+  const S = r.sinais, m = r.fis, u = Math.max(0, m.u);
+  // amostras dos últimos 4 s, para explicar uma queda
+  TESTE.amostras.push({ t: +raceT.toFixed(2), i: r.idx, lat: +r.lat.toFixed(1), kmh: Math.round(u * 3.6), gas: +ent.gas.toFixed(2), freio: +(ent.freio || 0).toFixed(2),
+    dir: +(ent.direcao || 0).toFixed(2), corpo: ent.corpo || 0, arf: +S.arfagem.toFixed(2), inc: +S.inclinacao.toFixed(2), vz: +m.vz.toFixed(1), chao: S.noChao, emPe: +S.emPe.toFixed(2), alt: +((m.z - m.p.cgAltura) - groundAt(r.idx, r.frac, r.lat) / K).toFixed(2), cF: +S.compressaoF.toFixed(2), cT: +S.compressaoT.toFixed(2) });
+  if (TESTE.amostras.length > 240) TESTE.amostras.shift();
+  if (TESTE.trilha && (TESTE.trilhaT = (TESTE.trilhaT || 0) + dt) >= (TESTE.trilhaPasso || 0.1)) { TESTE.trilhaT = 0; const a = TESTE.amostras[TESTE.amostras.length - 1]; TESTE.trilha.push({ ...a, alvo: +(ap.vAlvo * 3.6).toFixed(0), fase: humanoPilotando() ? 'humano' : ap.fase, pe: +S.peFora.toFixed(2), pl: +S.pesoLong.toFixed(2), pre: +S.preload.toFixed(2), der: +(S.deriva || 0).toFixed(2) }); }
+  const volta = Math.floor(r.prog / N);
+  if (volta > TESTE.voltaAtual) {
+    TESTE.voltaAtual = volta;
+    if (volta >= 1 && volta <= LAPS) { TESTE.voltas++; if (!TESTE.quedasVolta) TESTE.voltasLimpas++; TESTE.tempos.push(+(raceT - TESTE.inicioVolta).toFixed(2)); }
+    TESTE.quedasVolta = 0; TESTE.inicioVolta = raceT;
+  }
+  if (m.quedas > TESTE.quedasFis) {   // queda nova: o motivo sai do quadro de antes (o tombo já mexeu na moto)
+    TESTE.quedasFis = m.quedas; TESTE.quedasVolta++;
+    const a = TESTE.amostras[TESTE.amostras.length - 2] || TESTE.amostras[0];
+    const rampa = Math.atan2(hgt[wrap(r.idx + 2)] - hgt[wrap(r.idx - 2)], 4);
+    const motivo = !a.chao ? (a.vz < -9 ? 'pouso duro demais' : a.arf - rampa > 0.6 ? 'pousou de traseira, nariz alto' : a.arf - rampa < -0.45 ? 'pousou de frente, nariz baixo' : 'pouso torto')
+      : a.arf > 0.9 ? 'empinou demais' : 'perdeu o controle';
+    TESTE.quedas.push({ volta: volta + 1, t: raceT, onde: nomeTrecho(r.idx), motivo, kmh: a.kmh, humano: humanoPilotando(), antes: TESTE.amostras.slice(-120).filter((_, j) => j % 6 === 0) });
+  }
+  if (m.queda > 0) return;
+  const lento = u < 1 && !humanoPilotando() && !(r.remonta > 0);
+  TESTE.paradoT = lento ? TESTE.paradoT + dt : 0;
+  if (TESTE.paradoT > 2.5) { TESTE.atolos++; TESTE.paradoT = 0; voltaAoTracado(m, r.idx); r.inv = 1.2; }
+  if (Math.abs(r.lat) > HW + BORDA_SOLTA) TESTE.foraT += dt;
+  const chao = S.noChao, inc = S.inclinacao, fe = Math.abs(S.peFora), ob = obstaculoEm(r.idx, 0, 0);
+  let relevo = 0; for (let k = -6; k < 40; k += 2) relevo = Math.max(relevo, Math.abs(hgt[wrap(r.idx + k + 2)] - hgt[wrap(r.idx + k)]));
+  marca('curvaE', chao && inc > 0.3 && fe < 0.5, dt);
+  marca('curvaD', chao && inc < -0.3 && fe < 0.5, dt);
+  marca('sentado', chao && S.emPe < 0.25 && Math.abs(inc) > 0.2, dt);
+  marca('peFora', fe > 0.6, dt, 0.2);
+  marca('emPeReta', chao && S.emPe > 0.55 && relevo < 0.05 && Math.abs(ent.direcao || 0) < 0.2 && (ent.freio || 0) < 0.1 && u > 13, dt, 0.25);
+  marca('freada', chao && S.emPe > 0.6 && S.pesoLong < -0.25 && (ent.freio || 0) > 0.3, dt, 0.15);
+  marca('emPeCostelas', S.emPe > 0.7 && !!ob && ob.f.type === 'whoops', dt, 0.5);
+  marca('carga', S.preload > 0.5, dt, 0.1);
+  if (!chao) TESTE.noArT += dt; else { if (TESTE.noArT > 0.35) TESTE.ultimoVoo = gt; TESTE.noArT = 0; }
+  marca('voo', !chao && TESTE.noArT > 0.35, dt, 0.01);
+  marca('pouso', chao && gt - TESTE.ultimoVoo < 0.4 && Math.max(S.compressaoF, S.compressaoT) > 0.7, dt, 0.01);
+  marca('wheelie', chao && S.traseiraNoChao && !S.frenteNoChao && S.arfagem > 0.2, dt, 0.3);
+}
+function relatorioTeste() {
+  const mov = {}; for (const [k] of MOVIMENTOS) mov[k] = TESTE.mov[k].n;
+  return { corridas: TESTE.corridas, voltas: TESTE.voltas, voltasLimpas: TESTE.voltasLimpas, tempos: TESTE.tempos, quedas: TESTE.quedas.map(({ antes, ...q }) => q),
+    atolos: TESTE.atolos, foraDaPista: +TESTE.foraT.toFixed(1), faltam: MOVIMENTOS.filter(([k]) => !mov[k]).map(([, n]) => n), mov };
+}
+// placar na tela
+const painelTeste = document.createElement('div');
+painelTeste.id = 'painelTeste';
+painelTeste.style.cssText = 'display:none;position:absolute;right:8px;top:22%;z-index:3;width:min(44%,290px);padding:8px 10px;background:rgba(10,6,4,.8);color:#f4e8d8;font:11px/1.4 ui-monospace,Menlo,monospace;border:1px solid #8a5a38;border-radius:6px;white-space:pre-wrap;pointer-events:none';
+document.getElementById('screen').appendChild(painelTeste);
+let painelTesteT = 0;
+function desenhaPainelTeste() {
+  if (!TESTE.on || gt - painelTesteT < 0.2) return; painelTesteT = gt;
+  const S = P.sinais, m = P.fis;
+  let t = `TESTE AUTOMÁTICO · corrida ${TESTE.corridas + 1}\n`;
+  t += humanoPilotando() ? 'Piloto: VOCÊ (4 s parado, o automático volta)\n' : 'Piloto: automático (qualquer comando assume · K derruba)\n';
+  t += `Voltas sem cair: ${TESTE.voltasLimpas} de ${TESTE.voltas}   Quedas: ${TESTE.quedas.length}\n`;
+  if (S && m) t += `Agora: ${Math.round(Math.max(0, m.u) * 3.6)} km/h · ${S.noChao ? (S.emPe > 0.5 ? 'em pé' : 'sentado') : 'no ar'} · ${nomeTrecho(P.idx)}${humanoPilotando() ? '' : ' · ' + ap.fase}\n`;
+  t += '\nMovimentos (✓ já fez, ● fazendo agora):\n';
+  for (const [k, nome] of MOVIMENTOS) { const v = TESTE.mov[k]; t += `${gt - v.visto < 0.3 ? '●' : v.n ? '✓' : '·'} ${nome}${v.n ? ' ' + v.n : ''}\n`; }
+  const q = TESTE.quedas[TESTE.quedas.length - 1];
+  if (q) t += `\nÚltima queda: volta ${q.volta}, ${fmt(q.t)}, ${q.onde}: ${q.motivo} (${q.kmh} km/h)${q.humano ? ', com você' : ''}`;
+  if (TESTE.atolos) t += `\nParou ${TESTE.atolos}× e voltou ao traçado sozinho`;
+  painelTeste.textContent = t;
+}
+function ligaTeste(on) {
+  TESTE.on = on; painelTeste.style.display = on ? 'block' : 'none';
+  const b = document.getElementById('btnTeste'); if (b) b.setAttribute('aria-pressed', on);
+  if (on) { zeraTeste(); resetRace(); state = 'countdown'; cd = 1.6; lastBeep = 2; }
+}
+// direção pedida (setas ou dedo), em coordenadas da tela: x para a direita, y para cima
+function direcaoPedida() {
+  if (inp.stick) return inp.stick;
+  const x = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), y = (inp.up ? 1 : 0) - (inp.down ? 1 : 0);
+  return x || y ? { x, y } : null;
+}
+function comando(r) {
+  if (!(modo3d && r3d)) return { steer: (inp.right ? 1 : 0) - (inp.left ? 1 : 0), gas: inp.gas || inp.up ? 1 : 0, brake: inp.brake || inp.down ? 1 : 0 };
+  const d = direcaoPedida();
+  if (!d) return { steer: 0, gas: inp.gas ? 1 : 0, brake: inp.brake ? 1 : 0 };
+  // a câmera fixa olha sempre para o mesmo lado: "para cima na tela" é o ângulo dela no chão
+  const a = r3d.anguloTela + Math.atan2(d.x, d.y), dif = angDiff(r.a, a);
+  const k = r.air ? 1.1 : 2.6;   // no ar, apontar para o lado faz o whip, então a resposta é mais mansa
+  return { steer: clamp(dif * k, -1, 1), gas: Math.abs(dif) < 2.2 || inp.gas ? 1 : 0, brake: inp.brake ? 1 : 0 };
+}
+function setCam(i) {
+  camIdx = (i + CAMS.length) % CAMS.length; CB = CAMS[camIdx][1]; CH = CAMS[camIdx][2];
+  try { localStorage.setItem('braaaap-cam', String(camIdx)); } catch (e) {}
+}
+setCam(camIdx);
+function setRes(i) {
+  resIdx = (i + RES.length) % RES.length; SC = RES[resIdx][1]; RIDER_PX = 64 * SC;
+  setupCanvas();
+  try { localStorage.setItem('braaaap-res', String(resIdx)); } catch (e) {}
+  // recorta a cartela de novo no tamanho da nova resolução
+  if (typeof loadManifest === 'function') loadManifest('base', 'Cartela 3D (Blender): ').then(() => loadManifest('assets', 'Entrega aprovada: '));
+}
+function togglePause() { paused = !paused; document.getElementById('btnPause').setAttribute('aria-pressed', paused); }
+document.getElementById('btnPause').onclick = togglePause;
+document.getElementById('btnControle').onclick = () => painelControle(!painelAberto);
+document.getElementById('btnTeste').onclick = () => { initAudio(); ligaTeste(!TESTE.on); };
+if (/teste/.test(location.hash + location.search)) setTimeout(() => ligaTeste(true), 300);
+document.getElementById('btnCrt').onclick = e => { const on = document.getElementById('screen').classList.toggle('crt'); e.currentTarget.setAttribute('aria-pressed', on); };
+
+// ---------------------------------------------------------------- audio (motor 2T)
+let AC = null, eng = null, master = null, soundOn = false;
+function initAudio() {
+  if (AC || !soundOn) return;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = 0.16; master.connect(AC.destination);
+    const o1 = AC.createOscillator(); o1.type = 'sawtooth';
+    const o2 = AC.createOscillator(); o2.type = 'square';
+    const am = AC.createOscillator(); am.type = 'square';
+    const amG = AC.createGain(); amG.gain.value = 0.45; const vca = AC.createGain(); vca.gain.value = 0.55;
+    am.connect(amG); amG.connect(vca.gain);
+    const g2 = AC.createGain(); g2.gain.value = 0.4; o1.connect(vca); o2.connect(g2); g2.connect(vca);
+    const ws = AC.createWaveShaper(); const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(x * 2.6); } ws.curve = curve;
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 3;
+    const out = AC.createGain(); out.gain.value = 0;
+    vca.connect(ws); ws.connect(lp); lp.connect(out); out.connect(master);
+    o1.start(); o2.start(); am.start();
+    eng = { o1, o2, am, lp, out };
+  } catch (e) { AC = null; }
+}
+function engine(rpm, load) {
+  if (!eng) return;
+  const t = AC.currentTime, f = 46 + rpm * 200;
+  eng.o1.frequency.setTargetAtTime(f, t, 0.03); eng.o2.frequency.setTargetAtTime(f * 0.5, t, 0.03); eng.am.frequency.setTargetAtTime(f * 0.5, t, 0.03);
+  eng.lp.frequency.setTargetAtTime(420 + rpm * 2400 * (0.45 + load * 0.55), t, 0.05);
+  eng.out.gain.setTargetAtTime(0.3 + load * 0.45, t, 0.06);
+}
+function beep(f, d) {
+  if (!AC) return; const o = AC.createOscillator(), g = AC.createGain(); o.type = 'square'; o.frequency.value = f;
+  g.gain.setValueAtTime(0.25, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + d); o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime + d);
+}
+function thump() {
+  if (!AC) return; const len = AC.sampleRate * 0.25 | 0, buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260; s.buffer = buf; s.connect(f); f.connect(master); s.start();
+}
+function toggleSound() {
+  soundOn = !soundOn; document.getElementById('btnSound').setAttribute('aria-pressed', soundOn);
+  if (soundOn) { initAudio(); if (AC && AC.state === 'suspended') AC.resume(); if (master) master.gain.value = 0.16; }
+  else if (master) master.gain.value = 0;
+}
+document.getElementById('btnSound').onclick = toggleSound;
+
+// ---------------------------------------------------------------- update
+function update(dt) {
+  gt += dt;
+  pollPad();
+  if (state === 'countdown') {
+    cd -= dt; const n = Math.ceil(cd);
+    if (n < lastBeep && n >= 0) { lastBeep = n; beep(n > 0 ? 440 : 880, n > 0 ? 0.15 : 0.4); }
+    if (cd <= 0) { state = 'race'; raceT = 0; }
+  }
+  const frozen = state === 'countdown';
+  if (!frozen) {
+    const humano = state === 'race' && !P.finished && !DEMO && (!TESTE.on || humanoPilotando());
+    if (usaFisicaLab()) atualizarJogadorLab(P, humano ? lerEntradaLab(dt) : ROBO && TESTE.on ? jogadorRobo(P, ROBO) : autopilotoLab(P, dt), dt);
+    else {
+      const c = (state === 'race' && !P.finished && !DEMO) ? comando(P) : autopilot(P);
+      updatePlayer(P, c.steer, c.gas, c.brake, dt);
+    }
+    for (const a of AIS) updateAI(a, dt);
+    updateBichos(dt); batidaBichos();
+    for (const a of AIS) {
+      const dx = P.x - a.x, dy = P.y - a.y, d = Math.hypot(dx, dy);
+      if (d < 3.6 && d > 0.01 && Math.abs(P.z - a.z) < 3 && P.crash <= 0) { const k = (3.6 - d) / d * 0.5; P.x += dx * k; P.y += dy * k; P.v *= 0.985; if (P.fis) { P.fis.x = P.x / K; P.fis.y = -P.y / K; P.fis.u *= 0.985; } a.laneT = a.lat - Math.sign(P.lat - a.lat) * 5; }
+    }
+    // som do motor
+    const gears = [0, 22, 40, 58, 76, 999]; let gi = 0; while (P.v > gears[gi + 1]) gi++;
+    let rpm = 0.22 + 0.78 * (P.v - gears[gi]) / (Math.min(gears[gi + 1], 100) - gears[gi]);
+    const g = state === 'race' ? (P.fis ? entradaLab.gas > 0.15 : inp.gas || inp.up || inp.down || inp.left || inp.right || !!inp.stick) : true;
+    if (P.air && g) rpm = Math.min(1, rpm + 0.3);
+    engine(clamp(rpm, 0.12, 1), g ? 1 : 0.2);
+  } else { const a = inp.gas || inp.up || !!inp.stick; engine(a ? 0.75 : 0.14, a ? 1 : 0.2); }
+  if (state === 'race') {
+    raceT += dt;
+    if (P.prog >= LAPS * N && !P.finished) {
+      P.finished = true; finishPlace = place(); state = 'finish'; EVENTS.push({ t: +raceT.toFixed(3), tipo: 'chegada', lugar: finishPlace });
+      if (bestT === null || raceT < bestT) { bestT = raceT; try { localStorage.setItem('braaaap-best', String(raceT)); } catch (e) {} }
+    }
+  }
+  if (TESTE.on) {   // teste: corre de novo sozinho depois da chegada
+    if (state === 'finish' && (TESTE.fimT += dt) > 3) { TESTE.fimT = 0; TESTE.corridas++; TESTE.voltaAtual = 0; TESTE.quedasFis = 0; TESTE.inicioVolta = 0; resetRace(); state = 'countdown'; cd = 1.6; lastBeep = 2; }
+    desenhaPainelTeste();
+  }
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]; p.life -= dt; if (p.life <= 0) { parts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    if (p.t === 'clod') { p.vz -= 38 * dt; if (p.z < p.g) { p.z = p.g; p.vz = Math.abs(p.vz) > 4 ? -p.vz * 0.35 : 0; p.vx *= 0.5; p.vy *= 0.5; } }
+    else if (p.t === 'puff') { const k = Math.pow(0.12, dt); p.vx *= k; p.vy *= k; p.vz *= Math.pow(0.5, dt); p.s += p.grow * dt; }
+    else { p.vz -= 6 * dt; p.vx *= 0.96; p.vy *= 0.96; if (p.z < 0) p.z = 0; }
+  }
+  if (parts.length > 600) parts.splice(0, parts.length - 600);
+  for (let i = popups.length - 1; i >= 0; i--) if ((popups[i].t -= dt) <= 0) popups.splice(i, 1);
+  // câmera com atraso na rotação: dá o giro do vídeo de referência
+  camA += angDiff(camA, P.a) * (1 - Math.pow(0.0012, dt));
+  camX = P.x - Math.cos(camA) * CB; camY = P.y - Math.sin(camA) * CB;
+  camH += (CH + P.z * 0.55 - camH) * Math.min(1, dt * 5);
+  if (shake > 0) shake -= dt;
+}
+const place = () => 1 + AIS.filter(a => a.prog > P.prog).length;
+
+// ---------------------------------------------------------------- render
+let cosA = 1, sinA = 0, cHeight = CH;
+function proj(x, y, z) {
+  const dx = x - camX, dy = y - camY, f = dx * cosA + dy * sinA;
+  if (f < 2) return null;
+  const s = -dx * sinA + dy * cosA, k = F / f;
+  return { x: W / 2 + s * k, y: HZ + (cHeight - z) * k, k, f };
+}
+function drawFloor() {
+  const fx = cosA, fy = sinA, rx = -sinA, ry = cosA, T = tex, WS = W * SC, HS = H * SC;
+  for (let y = (HZ + 1) * SC; y < HS; y++) {
+    const z = cHeight * F / ((y + 0.5) / SC - HZ);
+    const step = z / F / SC;
+    let wx = camX + fx * z + rx * (-WS / 2 + 0.5) * step, wy = camY + fy * z + ry * (-WS / 2 + 0.5) * step;
+    const sx = rx * step, sy = ry * step;
+    let o = y * WS;
+    for (let x = 0; x < WS; x++, o++) {
+      floor32[o] = T[((wy | 0) & 1023) * 1024 + ((wx | 0) & 1023)];
+      wx += sx; wy += sy;
+    }
+  }
+  ctx.putImageData(floorImg, 0, 0, 0, (HZ + 1) * SC, WS, HS - (HZ + 1) * SC);
+  let off = (-camA * F) % SKYW; if (off > 0) off -= SKYW;
+  ctx.drawImage(sky, off, 0); ctx.drawImage(sky, off + SKYW, 0);
+  const hz = ctx.createLinearGradient(0, HZ, 0, HZ + 34);   // bruma quente de fim de tarde no fundo
+  hz.addColorStop(0, 'rgba(232,168,120,0.85)'); hz.addColorStop(1, 'rgba(232,168,120,0)');
+  ctx.fillStyle = hz; ctx.fillRect(0, HZ, W, 34);
+}
+// quadro de uma linha espelhada: v de -1 (forte à esquerda) a 1 (forte à direita)
+const pick = (fr, v) => fr[clamp(Math.round((v + 1) / 2 * (fr.length - 1)), 0, fr.length - 1)];
+// escolhe o quadro da cartela: queda > ângulo (rivais) > no ar > pilotagem; sem cartela, gira o sprite procedural
+function riderImg(r) {
+  const S = riderSets ? riderSets[r.ai ? r.look + 1 : 0] : null;
+  if (r.crash > 0 && S && S.crash) { const t = 1.3 - r.crash; return { img: S.crash[t < 0.25 ? 0 : t < 0.9 ? 1 : 2], rot: 0 }; }
+  if (r.crash > 0) return { img: S && S.lean ? pick(S.lean, 0) : r.ai ? rivalBase[r.look] : riderBase, rot: r.tumble };
+  if (r.ai && S && S.angles) {
+    // 0 = visto de trás; >0 = câmera do lado esquerdo do piloto (moto virada para a esquerda na tela)
+    const view = angDiff(r.a + Math.PI, Math.atan2(camY - r.y, camX - r.x)), av = Math.abs(view);
+    if (av > 0.26) return { img: S.angles[clamp(Math.round(av / (Math.PI / 6)), 0, 6)], rot: 0, flip: view < 0 };
+  }
+  if (r.air && S && S.air) return { img: pick(S.air, clamp(r.whip / 0.9, -1, 1)), rot: 0 };
+  if (S && S.lean) return { img: pick(S.lean, r.lean), rot: r.air ? r.whip : 0 };
+  return { img: r.ai ? rivalBase[r.look] : riderBase, rot: r.lean * 0.3 + r.whip };
+}
+const PUFF = (() => {   // nuvem de poeira pontilhada (dithering), sem degradê liso
+  const c = mk(16, 16), g = c.getContext('2d'), BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const d = Math.hypot(x - 7.5, (y - 7.5) * 1.1) / 8 + (hash(x, y) - 0.5) * 0.25;
+    if (d < 1 && (1 - d) * 1.6 > BY[(y & 3) * 4 + (x & 3)] / 16) { g.fillStyle = d < 0.45 ? '#d8a070' : y > 9 ? '#9a5a38' : '#c07c50'; g.fillRect(x, y, 1, 1); }
+  }
+  return c;
+})();
+const shadows = new WeakMap();
+function shadowOf(img) {
+  let s = shadows.get(img); if (s) return s;
+  s = mk(img.width, img.height); const g = s.getContext('2d');
+  g.drawImage(img, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#2a0e06'; g.fillRect(0, 0, s.width, s.height);
+  shadows.set(img, s); return s;
+}
+function drawList() {
+  const list = [];
+  for (const o of objs) {
+    const p = proj(o.x, o.y, 0);
+    if (!p || p.f > 520 || p.x < -140 || p.x > W + 140) continue;
+    list.push({ p, o });
+  }
+  for (const r of [P, ...AIS]) {
+    const p = proj(r.x, r.y, r.z); if (!p || p.f > 600) continue;
+    list.push({ p, r, g: proj(r.x, r.y, groundAt(r.idx, r.frac, r.lat)) });
+  }
+  for (const q of parts) { const p = proj(q.x, q.y, q.z); if (p && p.f < 300 && p.x > -40 && p.x < W + 40) list.push({ p, q }); }
+  for (const b of bichos) { const p = proj(b.x, b.y, b.z); if (p && p.f < 520 && p.x > -60 && p.x < W + 60) list.push({ p, b, g: proj(b.x, b.y, 0) }); }
+  // sombras primeiro (ficam no chão)
+  ctx.fillStyle = 'rgba(46,16,6,0.5)';
+  for (const e of list) {
+    if (e.o && e.o.type === 'tree') { const w = 10 * e.p.k; ctx.beginPath(); ctx.ellipse(e.p.x + w * 0.2, e.p.y, w / 2, Math.max(1, w * 0.14), 0, 0, 7); ctx.fill(); }
+    if (e.b && e.g) { const w = SPR[e.b.tipo].wh * 1.2 * e.g.k; ctx.beginPath(); ctx.ellipse(e.g.x, e.g.y, w / 2, Math.max(1, w * 0.16), 0, 0, 7); ctx.fill(); }
+    if (e.r && e.g && !(e.r.inv > 0 && (gt * 20 | 0) % 2)) {
+      // sombra com a silhueta do próprio quadro, deitada no chão na direção da câmera (sol baixo na frente)
+      const { img, rot, flip } = riderImg(e.r), sh = shadowOf(img), alt = Math.max(0, e.r.z - groundAt(e.r.idx, e.r.frac, e.r.lat));
+      const hh = 6.6 * e.g.k * img.height / (riderSets ? RIDER_PX : 32), ww = hh * img.width / img.height, enc = 1 / (1 + alt * 0.08);
+      ctx.save(); ctx.globalAlpha = 0.5 * enc; ctx.translate(Math.round(e.g.x), Math.round(e.g.y)); ctx.transform(1, 0, -0.25, -0.32 * enc, 0, 0);
+      ctx.rotate(rot); if (flip) ctx.scale(-1, 1); ctx.drawImage(sh, -ww / 2 * enc, -hh, ww * enc, hh); ctx.restore();
+    }
+  }
+  list.sort((a, b) => b.p.f - a.p.f);
+  for (const e of list) {
+    const p = e.p;
+    if (e.o) {
+      const s = SPR[e.o.type]; const hh = s.wh * p.k, ww = (e.o.ww || s.wh * s.img.width / s.img.height) * p.k;
+      if (hh < 1) continue;
+      ctx.drawImage(s.img, Math.round(p.x - ww / 2), Math.round(p.y - hh), Math.max(1, Math.round(ww)), Math.round(hh));
+    } else if (e.b) {
+      const b = e.b, s = SPR[b.tipo], anda = b.estado !== 'espera' || (b.t % 3) < 0.4;
+      const img = s.frames[anda ? (b.t * (b.estado === 'fugindo' ? 12 : 6) | 0) % s.frames.length : 0];
+      const hh = s.wh * p.k, ww = hh * img.width / img.height;
+      if (hh < 1) continue;
+      const q = proj(b.x - ty[b.i0] * b.dir, b.y + tx[b.i0] * b.dir, b.z), paraDireita = q && q.x > p.x;
+      ctx.save(); ctx.translate(Math.round(p.x), Math.round(p.y)); if (paraDireita) ctx.scale(-1, 1);
+      ctx.drawImage(img, -Math.round(ww / 2), -Math.round(hh), Math.round(ww), Math.round(hh)); ctx.restore();
+    } else if (e.q && e.q.t === 'puff') {
+      const a = e.q.life / e.q.max, sz = Math.max(2, Math.round(e.q.s * p.k));
+      ctx.globalAlpha = Math.min(1, a * 1.3) * 0.55; ctx.drawImage(PUFF, Math.round(p.x - sz / 2), Math.round(p.y - sz * 0.8), sz, sz); ctx.globalAlpha = 1;
+    } else if (e.q) {
+      const a = e.q.life / e.q.max, sz = Math.max(1, Math.round(e.q.s * p.k));
+      ctx.fillStyle = `rgba(${e.q.c || '170,92,52'},${(a * 0.8).toFixed(2)})`; ctx.fillRect(Math.round(p.x - sz / 2), Math.round(p.y - sz), sz, sz);
+    } else {
+      const r = e.r; if (r.inv > 0 && (gt * 20 | 0) % 2) continue;
+      const { img, rot, flip } = riderImg(r);
+      const hh = 6.6 * p.k * img.height / (riderSets ? RIDER_PX : 32), ww = hh * img.width / img.height;
+      ctx.save(); ctx.translate(Math.round(p.x), Math.round(p.y));
+      ctx.rotate(rot); if (flip) ctx.scale(-1, 1);
+      ctx.drawImage(img, -Math.round(ww / 2), -Math.round(hh), Math.round(ww), Math.round(hh));
+      ctx.restore();
+    }
+  }
+}
+const fmt = t => { const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(2); };
+function drawHUD() {
+  const lap = clamp(Math.floor(P.prog / N) + 1, 1, LAPS);
+  if (state === 'race' || state === 'countdown') {
+    txt('POS', 8, 6, 1, '#f8d038');
+    txt(place() + '/4', 8, 13, 3, '#f8d038');
+    txt('X' + combo, 50, 19, 2, '#ffffff');
+    txt('VOLTA ' + lap + '/' + LAPS, W - 8, 6, 1, '#f8d038', 'r');
+    txt(fmt(raceT), W - 8, 14, 2, '#ffffff', 'r');
+    txt(String(score).padStart(6, '0'), W - 8, 28, 1, '#ffffff', 'r');
+    const kmh = Math.round(P.fis ? Math.max(0, P.fis.u) * 3.6 : P.v * 0.8);
+    txt(String(kmh).padStart(3, '0'), 8, H - 16, 2, '#ffffff'); txt('KM/H', 34, H - 12, 1, '#f8d038');
+    const bw = 60, fill = Math.round(bw * clamp(P.v / VMAX, 0, 1));
+    ctx.fillStyle = '#1c0a04'; ctx.fillRect(8, H - 22, bw + 2, 4);
+    ctx.fillStyle = '#d8642c'; ctx.fillRect(9, H - 21, fill, 2);
+  }
+  if (state === 'countdown') {
+    const n = Math.ceil(cd);
+    if (n > 0 && n <= 3) txt(String(n), W / 2, 34, 8, '#f8d038', 'c');   // acima do piloto, que fica no meio da tela
+  }
+  if (state === 'race' && raceT < 1.2) txt('BRAAAAP!', W / 2, 76, 4, '#f8d038', 'c');
+  popups.forEach((p, i) => { if ((p.t * 10 | 0) % 3 !== 0 || p.t > 0.5) txt(p.text, W / 2, 48 + i * 10, 2, p.text === 'CAIU!' ? '#ff6040' : '#ffffff', 'c'); });
+  if (state === 'title') {
+    ctx.fillStyle = 'rgba(20,8,4,0.35)'; ctx.fillRect(0, 26, W, 72);
+    txt('BRAAAAP', W / 2, 32, 6, '#f8d038', 'c');
+    txt('2T', W / 2 + 81, 66, 4, '#e03a28', 'r');
+    txt('MOTOCROSS DE TERRA VERMELHA', W / 2, 88, 1, '#ffffff', 'c');
+    if ((gt * 2 | 0) % 2 === 0) txt('APERTE ENTER', W / 2, 150, 2, '#ffffff', 'c');
+    txt('PROTOTIPO', W / 2, H - 12, 1, '#f8d038', 'c');
+  }
+  if (state === 'finish') {
+    ctx.fillStyle = 'rgba(20,8,4,0.55)'; ctx.fillRect(0, 40, W, 100);
+    txt('CHEGADA!', W / 2, 48, 4, '#f8d038', 'c');
+    txt(finishPlace + 'O LUGAR', W / 2, 76, 2, '#ffffff', 'c');
+    txt('TEMPO ' + fmt(raceT), W / 2, 94, 1, '#ffffff', 'c');
+    txt('PONTOS ' + score, W / 2, 104, 1, '#ffffff', 'c');
+    if (bestT !== null) txt('RECORDE ' + fmt(bestT), W / 2, 114, 1, '#f8d038', 'c');
+    if ((gt * 2 | 0) % 2 === 0) txt('ENTER: CORRER DE NOVO', W / 2, 128, 1, '#ffffff', 'c');
+  }
+  if (paused) { ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 0, W, H); txt('PAUSA', W / 2, 100, 4, '#ffffff', 'c'); }
+}
+function render() {
+  cosA = Math.cos(camA); sinA = Math.sin(camA); cHeight = camH;
+  ctx.setTransform(SC, 0, 0, SC, 0, 0);
+  ctx.save();
+  if (modo3d && r3d) {                     // 3D: o WebGL desenha o mundo por baixo; aqui fica só o HUD
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.setTransform(SC, 0, 0, SC, 0, 0);
+    r3d.render();
+  } else {
+    if (shake > 0) ctx.translate(0, Math.round(Math.sin(gt * 70) * shake * 6));
+    drawFloor();
+    drawList();
+  }
+  ctx.restore();
+  drawHUD();
+}
+let last = performance.now(), acc = 0, congelado = false;
+function frame(t) {
+  const dt = Math.min(0.1, (t - last) / 1000); last = t;
+  if (!paused && !congelado) { acc += dt; while (acc >= STEP) { update(STEP); acc -= STEP; } }
+  render(); drawLab(t);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setModo(true);
+
+// ---------------------------------------------------------------- guide image
+function guideCanvas() {
+  const c = mk(TEX, TEX), g = c.getContext('2d'), d = g.createImageData(TEX, TEX);
+  new Uint32Array(d.data.buffer).set(texGuide); g.putImageData(d, 0, 0); return c;
+}
+const guide = guideCanvas();
+document.getElementById('guideImg').src = guide.toDataURL('image/png');
+
+// ---------------------------------------------------------------- Nano Banana importers
+function loadImg(file) {
+  return new Promise((res, rej) => { const u = URL.createObjectURL(file), im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = u; });
+}
+function quantize(d) { const p = d.data; for (let i = 0; i < p.length; i += 4) { p[i] = q5(p[i]); p[i + 1] = q5(p[i + 1]); p[i + 2] = q5(p[i + 2]); } return d; }
+const isKey = (r, g, b) => r > 90 && b > 90 && g < Math.min(r, b) * 0.62 && Math.abs(r - b) < 110;
+// folha com fundo magenta: remove o fundo e acha cada pose pelas colunas ocupadas
+function keyCanvas(im) {
+  const c = mk(im.width, im.height), g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(im, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+  let keyed = 0;
+  // fundo = magenta ou já transparente (PNG com alfa, como o gerador de imagens do Codex entrega)
+  for (let i = 0; i < p.length; i += 4) if (p[i + 3] < 16 || isKey(p[i], p[i + 1], p[i + 2])) { p[i + 3] = 0; keyed++; }
+  g.putImageData(d, 0, 0);
+  LAST.bg = +(keyed / (p.length / 4)).toFixed(3);
+  return { c, p, w: c.width, h: c.height };
+}
+function boxOf(k, x0, x1) {
+  let y0 = -1, y1 = -1, mass = 0, bx0 = 1e9, bx1 = -1;
+  for (let y = 0; y < k.h; y++) {
+    let any = false;
+    for (let x = x0; x <= x1; x++) if (k.p[(y * k.w + x) * 4 + 3]) { any = true; mass++; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; }
+    if (any) { if (y0 < 0) y0 = y; y1 = y; }
+  }
+  return y0 < 0 ? null : { x0: bx0, x1: bx1, y0, y1, mass };
+}
+function findPoses(k, expect) {
+  const col = new Uint32Array(k.w);
+  for (let y = 0; y < k.h; y++) for (let x = 0; x < k.w; x++) if (k.p[(y * k.w + x) * 4 + 3]) col[x]++;
+  const runs = []; let st = -1;
+  for (let x = 0; x <= k.w; x++) { const on = x < k.w && col[x] > 1; if (on && st < 0) st = x; if (!on && st >= 0) { runs.push([st, x - 1]); st = -1; } }
+  const gap = Math.max(3, k.w * 0.012), merged = [];
+  for (const r of runs) { if (merged.length && r[0] - merged[merged.length - 1][1] < gap) merged[merged.length - 1][1] = r[1]; else merged.push(r.slice()); }
+  let boxes = merged.map(([x0, x1]) => boxOf(k, x0, x1)).filter(Boolean);
+  if (!boxes.length) throw new Error('A imagem ficou vazia depois de tirar o magenta. O fundo precisa ser #FF00FF e as poses precisam ter outras cores.');
+  const big = Math.max(...boxes.map(b => b.mass));
+  boxes = boxes.filter(b => b.mass > big * 0.08);
+  if (expect.includes(boxes.length)) return { boxes, warn: '' };
+  const n = expect[0], cw = k.w / n, eq = [];
+  for (let i = 0; i < n; i++) { const b = boxOf(k, Math.floor(i * cw), Math.floor((i + 1) * cw) - 1); if (b) eq.push(b); }
+  if (eq.length !== n) throw new Error(`Esperava ${expect.join(' ou ')} poses e achei ${boxes.length}. Deixe mais espaço magenta entre elas.`);
+  return { boxes: eq, warn: `Achei ${boxes.length} manchas; dividi em ${n} partes iguais. Confira as poses.` };
+}
+// recorta cada pose; com altura única, a pose mais alta define a escala da linha inteira
+function cropBoxes(k, boxes, heights, quant) {
+  const tall = Math.max(...boxes.map(b => b.y1 - b.y0 + 1));
+  return boxes.map((b, i) => {
+    const sw = b.x1 - b.x0 + 1, sh = b.y1 - b.y0 + 1;
+    const sc = Array.isArray(heights) ? (heights[i] || heights[0]) / sh : heights / tall;
+    const tw = Math.max(1, Math.round(sw * sc)), th = Math.max(1, Math.round(sh * sc));
+    const s = mk(tw, th), sg = s.getContext('2d', { willReadFrequently: true });
+    sg.imageSmoothingEnabled = true; sg.imageSmoothingQuality = 'high';
+    sg.drawImage(k.c, b.x0, b.y0, sw, sh, 0, 0, tw, th);
+    const sd = sg.getImageData(0, 0, tw, th), sp = sd.data;
+    for (let j = 0; j < sp.length; j += 4) {
+      if (sp[j + 3] < 120 || isKey(sp[j], sp[j + 1], sp[j + 2])) { sp[j] = sp[j + 1] = sp[j + 2] = sp[j + 3] = 0; continue; }
+      const a = sp[j + 3] / 255; sp[j] /= a; sp[j + 1] /= a; sp[j + 2] /= a; sp[j + 3] = 255;
+    }
+    sg.putImageData(quant ? quantize(sd) : sd, 0, 0); return s;
+  });
+}
+function flipC(c) { const f = mk(c.width, c.height), g = f.getContext('2d'); g.translate(c.width, 0); g.scale(-1, 1); g.drawImage(c, 0, 0); return f; }
+// paletas de sprite do SNES: 2 × 15 cores + transparente, compartilhadas por todos os quadros do piloto
+function medianCut(px, n) {
+  let boxes = [px];
+  while (boxes.length < n) {
+    let bi = -1, bs = 0, bc = 0;
+    boxes.forEach((b, i) => {
+      if (b.length < 2) return;
+      for (let c = 0; c < 3; c++) { let mn = 255, mx = 0; for (const q of b) { if (q[c] < mn) mn = q[c]; if (q[c] > mx) mx = q[c]; } const sc = (mx - mn) * Math.sqrt(b.length); if (sc > bs) { bs = sc; bi = i; bc = c; } }
+    });
+    if (bi < 0) break;
+    const b = boxes[bi].sort((u, v) => u[bc] - v[bc]), mid = b.length >> 1;
+    boxes.splice(bi, 1, b.slice(0, mid), b.slice(mid));
+  }
+  const pal = boxes.map(b => { let r = 0, g = 0, bb = 0; for (const q of b) { r += q[0]; g += q[1]; bb += q[2]; } const l = b.length; return [q5(r / l | 0), q5(g / l | 0), q5(bb / l | 0)]; });
+  return pal.filter((c, i) => pal.findIndex(d => d[0] === c[0] && d[1] === c[1] && d[2] === c[2]) === i);
+}
+const rotPal = (pal, deg) => { const m = hueMat(deg); return pal.map(([r, g, b]) => [0, 3, 6].map(o => q5(clamp(r * m[o] + g * m[o + 1] + b * m[o + 2], 0, 255) | 0))); };
+function paintIdx(f, pal) {
+  const c = mk(f.w, f.h), g = c.getContext('2d'), d = g.createImageData(f.w, f.h), p = d.data;
+  for (let i = 0; i < f.a.length; i++) if (f.a[i]) { const col = pal[f.a[i] - 1]; p[i * 4] = col[0]; p[i * 4 + 1] = col[1]; p[i * 4 + 2] = col[2]; p[i * 4 + 3] = 255; }
+  g.putImageData(d, 0, 0); return c;
+}
+function rebuildRider() {
+  const kinds = Object.keys(rawRows).filter(k => rawRows[k]);
+  if (!kinds.length) { riderSets = null; palettes = null; return; }
+  if (!LIMITE_CORES) {                        // cores livres: usa a arte como veio; rivais são a mesma arte com outro matiz
+    palettes = null;
+    const variantes = [c => c, ...RIVALS.map(v => c => hueRotate(c, v.hue))];
+    riderSets = variantes.map(fn => {
+      const set = {};
+      for (const k of kinds) {
+        let fr = rawRows[k].map(fn);
+        if (ROWDEF[k].mirror) fr = [...fr.slice(1).reverse(), fr[0], ...fr.slice(1).map(flipC)];
+        set[k] = fr;
+      }
+      return set;
+    });
+    return;
+  }
+  const px = [], data = {};
+  for (const k of kinds) data[k] = rawRows[k].map(c => ({ w: c.width, h: c.height, d: c.getContext('2d').getImageData(0, 0, c.width, c.height).data }));
+  for (const k of kinds) for (const f of data[k]) for (let i = 0; i < f.d.length; i += 4) if (f.d[i + 3]) px.push([f.d[i], f.d[i + 1], f.d[i + 2]]);
+  const pal = medianCut(px, PAL_N);
+  const idx = {};
+  for (const k of kinds) idx[k] = data[k].map(f => {
+    const a = new Uint8Array(f.w * f.h);
+    for (let i = 0; i < a.length; i++) if (f.d[i * 4 + 3]) {
+      let best = 0, bd = 1e9;
+      for (let j = 0; j < pal.length; j++) { const dr = f.d[i * 4] - pal[j][0], dg = f.d[i * 4 + 1] - pal[j][1], db = f.d[i * 4 + 2] - pal[j][2], dd = dr * dr * 2 + dg * dg * 3 + db * db; if (dd < bd) { bd = dd; best = j; } }
+      a[i] = best + 1;
+    }
+    return { w: f.w, h: f.h, a };
+  });
+  palettes = [pal, ...RIVALS.map(v => rotPal(pal, v.hue))];
+  riderSets = palettes.map(pl => {
+    const set = {};
+    for (const k of kinds) {
+      let fr = idx[k].map(f => paintIdx(f, pl));
+      if (ROWDEF[k].mirror) fr = [...fr.slice(1).reverse(), fr[0], ...fr.slice(1).map(flipC)];
+      set[k] = fr;
+    }
+    return set;
+  });
+}
+// resumo da última importação: lido pelo validador do pipeline (pipeline/validate.mjs)
+let LAST = {};
+function importRow(kind, im) {
+  const k = keyCanvas(im), { boxes, warn } = findPoses(k, ROWDEF[kind].expect);
+  LAST.poses = boxes.length; LAST.warn = warn;
+  rawRows[kind] = cropBoxes(k, boxes, RIDER_PX, false);
+  rebuildRider();
+  LAST.colors = palettes ? palettes[0].length : 'livres';
+  const mir = ROWDEF[kind].mirror ? `, espelhadas para ${boxes.length * 2 - 1}` : '';
+  return (warn ? warn + ' ' : '') + `${boxes.length} poses${mir}. ` + (palettes ? `Paleta: ${palettes[0].length} cores (2 paletas de 15) + transparente.` : 'Cores livres.');
+}
+const IMPORT = {
+  track(im) {
+    const c = mk(TEX, TEX), g = c.getContext('2d', { willReadFrequently: true }), s = Math.min(im.width, im.height);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, 0, 0, TEX, TEX);
+    const d = quantize(g.getImageData(0, 0, TEX, TEX));
+    tex = new Uint32Array(d.data.buffer.slice(0));
+    return 'Pista aplicada: 1024×1024 com cores de 15 bits.';
+  },
+  lean: im => importRow('lean', im),
+  angles: im => importRow('angles', im),
+  air: im => importRow('air', im),
+  crash: im => importRow('crash', im),
+  props(im) {
+    const k = keyCanvas(im), fp = findPoses(k, [4]), fr = cropBoxes(k, fp.boxes, [40, 14, 12, 12], true);
+    LAST.poses = fp.boxes.length; LAST.warn = fp.warn;
+    const names = ['tree', 'bush', 'tire', 'hay'];
+    let n = 0; fr.forEach((f, i) => { if (f) { SPR[names[i]].img = f; n++; } });
+    if (!n) throw new Error('Nenhum objeto encontrado. O fundo precisa ser magenta puro (#FF00FF).');
+    return n + ' de 4 objetos aplicados.';
+  },
+  galinha: im => importBicho('galinha', im),
+  porco: im => importBicho('porco', im),
+  vaca: im => importBicho('vaca', im),
+  'trilha-a': im => importSet(im, TRILHA['trilha-a'], [40, 20, 36, 12]),
+  'trilha-b': im => importSet(im, TRILHA['trilha-b'], [20, 32, 16, 14]),
+  sky(im) {
+    const c = mk(SKYW, HZ), g = c.getContext('2d', { willReadFrequently: true });
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(im, 0, 0, SKYW, HZ);
+    g.putImageData(quantize(g.getImageData(0, 0, SKYW, HZ)), 0, 0);
+    sky = c; return 'Horizonte aplicado: ' + SKYW + '×' + HZ + ', dá a volta completa de 360°.';
+  },
+};
+const TRILHA = { 'trilha-a': ['casebre', 'carroca', 'mandacaru', 'entulho'], 'trilha-b': ['menino_bola', 'menino_pipa', 'varal', 'bicicleta'] };
+function importBicho(n, im) {
+  const k = keyCanvas(im), fp = findPoses(k, [2]), fr = cropBoxes(k, fp.boxes, 24, true);
+  LAST.poses = fp.boxes.length; LAST.warn = fp.warn;
+  SPR[n].frames = fr; SPR[n].img = fr[0];
+  return `${n}: ${fr.length} quadros de corrida aplicados.`;
+}
+function importSet(im, names, heights) {
+  const k = keyCanvas(im), fp = findPoses(k, [names.length]), fr = cropBoxes(k, fp.boxes, heights, true);
+  LAST.poses = fp.boxes.length; LAST.warn = fp.warn;
+  fr.forEach((f, i) => { if (f) SPR[names[i]].img = f; });
+  return `${fr.length} de ${names.length} objetos aplicados: ${names.join(', ').replace(/_/g, ' ')}.`;
+}
+const RESET = {
+  galinha() { defaultSprites(); }, porco() { defaultSprites(); }, vaca() { defaultSprites(); },
+  'trilha-a'() { defaultSprites(); }, 'trilha-b'() { defaultSprites(); },
+  track() { tex = texDefault; },
+  lean() { rawRows.lean = null; rebuildRider(); },
+  angles() { rawRows.angles = null; rebuildRider(); },
+  air() { rawRows.air = null; rebuildRider(); },
+  crash() { rawRows.crash = null; rebuildRider(); },
+  props() { defaultSprites(); },
+  sky() { sky = defaultSky(); },
+};
+function drawThumb(kind, slot) {
+  const c = slot.querySelector('canvas'), g = c.getContext('2d');
+  g.imageSmoothingEnabled = false; g.clearRect(0, 0, c.width, c.height);
+  if (kind === 'track') {
+    const t = mk(TEX, TEX), tg = t.getContext('2d'), d = tg.createImageData(TEX, TEX);
+    new Uint32Array(d.data.buffer).set(tex); tg.putImageData(d, 0, 0); g.drawImage(t, 0, 0, c.width, c.height);
+  } else if (ROWDEF[kind]) {
+    let fr = riderSets && riderSets[0][kind];
+    if (!fr && kind === 'lean') fr = [-0.35, -0.18, 0, 0.18, 0.35].map(a => { const s = mk(28, 32), sg = s.getContext('2d'); sg.translate(14, 32); sg.rotate(a); sg.drawImage(riderBase, -12, -32); return s; });
+    if (!fr) return;
+    const total = fr.reduce((t, f) => t + f.width + 3, 0), sc = Math.min(1.1, (c.width - 4) / total, 38 / 32);
+    let x = 2; for (const f of fr) { const w = Math.round(f.width * sc), h = Math.round(f.height * sc); g.drawImage(f, x, 39 - h, w, h); x += w + 3; }
+  } else if (SPR[kind] && SPR[kind].frames || TRILHA[kind]) {
+    const imgs = TRILHA[kind] ? TRILHA[kind].map(n => SPR[n].img) : SPR[kind].frames;
+    const total = imgs.reduce((t, f) => t + 38 * f.width / f.height + 6, 0), sc = Math.min(1, (c.width - 4) / total);
+    let x = 2; for (const f of imgs) { const h = 38 * sc, w = h * f.width / f.height; g.drawImage(f, x, 40 - h, w, h); x += w + 6 * sc; }
+  } else if (kind === 'props') {
+    let x = 4; for (const n of ['tree', 'bush', 'tire', 'hay']) { const s = SPR[n].img, h = n === 'tree' ? 40 : 20, w = h * s.width / s.height; g.drawImage(s, x, 42 - h, w, h); x += w + 8; }
+  } else g.drawImage(sky, 0, 0, SKYW, HZ, 0, 0, c.width, c.height);
+}
+document.querySelectorAll('.slot').forEach(slot => {
+  const kind = slot.dataset.kind, st = slot.querySelector('.status'), input = slot.querySelector('input');
+  const handle = async file => {
+    if (!file || !file.type.startsWith('image/')) { st.textContent = 'Esse arquivo não é uma imagem.'; st.className = 'status'; return; }
+    st.textContent = 'Convertendo…'; st.className = 'status';
+    try { applyImport(kind, await loadImg(file)); } catch (e) { st.textContent = 'Não consegui ler a imagem.'; st.className = 'status'; }
+  };
+  input.addEventListener('change', () => handle(input.files[0]));
+  slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('over'); });
+  slot.addEventListener('dragleave', () => slot.classList.remove('over'));
+  slot.addEventListener('drop', e => { e.preventDefault(); slot.classList.remove('over'); handle(e.dataTransfer.files[0]); });
+  slot.querySelector('.reset').onclick = () => { RESET[kind](); refreshThumbs(); st.textContent = 'Voltou para o padrão gerado pelo código.'; st.className = 'status'; };
+  drawThumb(kind, slot);
+});
+
+// aplica uma imagem a um encaixe e devolve o resultado; usado pela página, pelo manifesto e pelo validador
+function applyImport(kind, im, prefix = '') {
+  const st = document.querySelector(`.slot[data-kind=${kind}] .status`);
+  LAST = { kind, w: im.width, h: im.height };
+  try {
+    const msg = IMPORT[kind](im);
+    if (st) { st.textContent = prefix + msg; st.className = 'status ok'; }
+    refreshThumbs();
+    return { ok: true, status: msg, ...LAST };
+  } catch (e) {
+    if (st) { st.textContent = prefix + e.message; st.className = 'status'; }
+    return { ok: false, status: e.message, ...LAST };
+  }
+}
+const imgFromURL = url => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('Não consegui abrir ' + url)); im.src = url; });
+// dois manifestos: base/ (cartela do Blender, dono Claude) e assets/ (entregas aprovadas, dono Codex).
+// O de assets/ vem depois e substitui o encaixe que repetir.
+async function loadManifest(dir, prefix) {
+  let man;
+  try { const r = await fetch(dir + '/manifest.json', { cache: 'no-store' }); if (!r.ok) return; man = await r.json(); } catch (e) { return; }
+  for (const [kind, file] of Object.entries(man.assets || {})) {
+    if (!IMPORT[kind] || !file) continue;
+    try { applyImport(kind, await imgFromURL(dir + '/' + file), prefix); } catch (e) { console.warn(e.message); }
+  }
+}
+loadManifest('base', 'Cartela 3D (Blender): ').then(() => loadManifest('assets', 'Entrega aprovada: '));
+
+function refreshThumbs() { document.querySelectorAll('.slot').forEach(sl => drawThumb(sl.dataset.kind, sl)); drawPalettes(); }
+
+// gabaritos: fundo #FF00FF com guias em magenta escuro (o importador remove os dois)
+function gabarito(n, w) {
+  const h = 864, c = mk(w, h), g = c.getContext('2d'), m = 24, cw = (w - 2 * m) / n;
+  g.fillStyle = '#FF00FF'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#B000B0';
+  for (let i = 0; i < n; i++) {
+    const x = m + i * cw;
+    g.lineWidth = 4; g.setLineDash([]); g.strokeRect(x + 10, 40, cw - 20, h - 80);
+    g.lineWidth = 6; g.beginPath(); g.moveTo(x + 24, h * 0.8); g.lineTo(x + cw - 24, h * 0.8); g.stroke();
+    g.lineWidth = 4; g.beginPath(); g.moveTo(x + cw / 2, h * 0.8 - 36); g.lineTo(x + cw / 2, h * 0.8 + 36); g.stroke();
+    g.setLineDash([18, 14]); g.beginPath(); g.moveTo(x + 24, h * 0.2); g.lineTo(x + cw - 24, h * 0.2); g.stroke();
+  }
+  return c;
+}
+const GAB = { lean: gabarito(3, 1536), angles: gabarito(7, 2016), air: gabarito(3, 1536), crash: gabarito(3, 1536) };
+const GABURL = {};
+for (const k in GAB) { GABURL[k] = GAB[k].toDataURL('image/png'); const im = document.querySelector(`.slot[data-kind=${k}] .gab`); if (im) im.src = GABURL[k]; }
+
+const palCv = document.getElementById('palettes'), palInfo = document.getElementById('palInfo');
+function drawPalettes() {
+  const g = palCv.getContext('2d'); g.clearRect(0, 0, palCv.width, palCv.height);
+  if (!palettes) { palInfo.textContent = riderSets ? 'Cores livres: a arte entra como veio do gerador. Os rivais são a mesma arte com outro matiz.' : 'Sprite provisório do código.'; return; }
+  palettes.forEach((pl, r) => {
+    for (let i = 0; i <= PAL_N; i++) {
+      if (i === 0) { for (let q = 0; q < 4; q++) { g.fillStyle = q % 3 ? '#555' : '#999'; g.fillRect((q & 1) * 5, r * 10 + (q >> 1) * 5, 5, 5); } continue; }
+      const col = pl[i - 1]; if (!col) continue; g.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`; g.fillRect(i * 10, r * 10, 10, 10);
+    }
+  });
+  palInfo.textContent = `Linha 1: piloto nº 7. Linhas 2–4: rivais com a mesma arte e outra paleta. ${palettes[0].length} cores (2 paletas de 15) + transparente, formato BGR555.`;
+}
+const ttCv = document.getElementById('turntable'), tt = ttCv.getContext('2d');
+let ttStep = 0, ttLast = 0;
+function drawLab(t) {
+  if (t - ttLast < 140) return; ttLast = t; ttStep++;
+  tt.imageSmoothingEnabled = false;
+  tt.fillStyle = '#b8602e'; tt.fillRect(0, 0, 96, 56); tt.fillStyle = '#9a4c24'; for (let y = 0; y < 56; y += 6) tt.fillRect(0, y, 96, 1);
+  const S = riderSets && riderSets[0];
+  let img, flip = false;
+  if (S && S.angles) { const seq = [0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1]; const i = ttStep % 24; img = S.angles[seq[i % 12]]; flip = i >= 12; }
+  else if (S && S.lean) { const n = S.lean.length, c = (n - 1) / 2, seq = [...Array(n).keys()].slice(c).concat([...Array(n).keys()].reverse(), [...Array(c).keys()]); img = S.lean[seq[ttStep % seq.length]]; }
+  else img = riderBase;
+  tt.fillStyle = 'rgba(46,16,6,.5)'; tt.beginPath(); tt.ellipse(48, 50, 13, 3, 0, 0, 7); tt.fill();
+  tt.save(); tt.translate(48, 50); if (flip) tt.scale(-1, 1); tt.drawImage(img, -Math.round(img.width / 2), -img.height); tt.restore();
+}
+drawPalettes();
+
+window.BRAAAP = { bichos: () => bichos, events: () => EVENTS, importDataURL: async (kind, url) => applyImport(kind, await imgFromURL(url)), gabaritos: () => GABURL, guideDataURL: () => guide.toDataURL('image/png'), N, features, state: () => ({ state, P, AIS }), vibra,   // vibra: para testar a vibração do controle
+  // teste automático sem desenhar: roda o jogo em passo fixo e devolve o placar (voltas, quedas, movimentos)
+  pronto: () => !!FIS, teste: () => relatorioTeste(), quedas: () => TESTE.quedas, ap: () => AP,
+  passo(n = 1) { for (let k = 0; k < n; k++) update(STEP); }, chao: (x, y) => chaoDaMoto(P, x, y), testeObj: () => TESTE,
+  pausa(v) { congelado = v; },
+  derruba() { if (P.fis) { P.fis.queda = 2; P.fis.quedas++; } },   // queda forçada (prints da animação)   // congela o jogo sem a tela de pausa (prints de revisão)
+  trilha: () => TESTE.trilha, pista: () => ({ hgt: [...hgt], curv: [...curv], vlim: [...VLIM], features }),
+  simular(seg = 240, ajustes, trilha, robo = null) {
+    if (ajustes) { Object.assign(AP, ajustes); planejaVelocidades(); }
+    ROBO = robo;
+    ligaTeste(true); state = 'race'; cd = 0; raceT = 0; TESTE.trilha = trilha ? [] : null;
+    for (let k = 0, n = Math.round(seg / STEP); k < n; k++) update(STEP);
+    return relatorioTeste();
+  },
+};
+})();
+</script>

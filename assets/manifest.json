@@ -1,0 +1,8 @@
+{
+  "assets": {
+    "lean": "piloto-pilotagem-9.png",
+    "angles": "piloto-angulos.png",
+    "air": "piloto-no-ar.png",
+    "crash": "piloto-queda.png"
+  }
+}
